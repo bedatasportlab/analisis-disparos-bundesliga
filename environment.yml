@@ -27,9 +27,10 @@ dependencies:
   - scikit-learn
   - scipy
   
-  # Entorno de desarrollo interactivo
+  # Entorno de desarrollo interactivo y Publicación
   - jupyterlab
   - ipykernel
+  - quarto        # Compilación de documentos y libros
   
   # Librerías específicas vía pip
   - pip
