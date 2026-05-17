@@ -1,3 +1,374 @@
 ---
 title: "Preprocesamiento de los datos"
 ---
+
+En este capítulo, el objetivo será construir el conjunto de datos inicial sobre el que vamos a calcular las métricas necesarias para hacer el estudio sobre las finalizaciones y sus tiros previos. 
+
+# Ingesta y Extracción de Datos Base
+
+En esta fase inicial, establecemos los cimientos de nuestro conjunto de datos analítico procesando la materia prima suministrada por StatsBomb. Dado el considerable volumen computacional que implica cargar el historial completo de eventos de una competición, implementamos una estrategia de filtrado en origen.
+
+El proceso recorre secuencialmente el directorio de eventos procesados, extrayendo de manera exclusiva las acciones del equipo objeto de estudio (Bayer Leverkusen). Por cada partido, dividimos la información en dos flujos principales:
+
+1. Disparos (Shots): Todos los tiros registrados por StatsBomb.
+2. Pases Clave (Key Passes): Aquellos pases que están referenciados directamente como la acción previa a un disparo, garantizando la trazabilidad de la secuencia ofensiva. 
+
+Simultáneamente, extraemos y consolidamos los datos de cada partido cargando el diccionario de partidos y las alineaciones de cada uno. De esta manera podremos enriquecer posteriormente los análisis realizados. 
+
+```{python}
+import pandas as pd
+from pathlib import Path
+import os 
+#os.chdir("notebook") # Poner si es necesario
+
+# Definimos las rutas a los directorios de datos procesados
+# (Ajusta estas rutas según la estructura exacta de tus carpetas)
+PATH_EVENTS = Path("../data/processed/events")
+PATH_MATCHES = Path("../data/processed/matches")
+PATH_LINEUPS = Path("../data/processed/lineups")
+
+# Listas para almacenar los dataframes temporales en memoria
+lista_tiros = []
+lista_pases_clave = []
+lista_partidos = []
+lista_lineups = []
+
+print("Iniciando la ingesta de datos a nivel global...")
+
+# =====================================================================
+# 1. EXTRACCIÓN DE EVENTOS (TIROS Y PASES CLAVE GLOBALES)
+# =====================================================================
+for file_path in PATH_EVENTS.glob("*.parquet"):
+    try:
+        df_evento = pd.read_parquet(file_path)
+        
+        # NUEVO: Extraemos el match_id del nombre del archivo y lo inyectamos
+        # Esto asegura la trazabilidad relacional para todos los eventos del partido
+        match_id_evento = int(file_path.stem)
+        df_evento['match_id'] = match_id_evento
+        
+        df_tiros_partido = df_evento[df_evento['type_name'] == 'Shot'].copy()
+        
+        ids_pases_previos = df_tiros_partido['shot_key_pass_id'].dropna().unique()
+        
+        df_pases_partido = df_evento[df_evento['id'].isin(ids_pases_previos)].copy()
+        
+        if not df_tiros_partido.empty:
+            lista_tiros.append(df_tiros_partido)
+        if not df_pases_partido.empty:
+            lista_pases_clave.append(df_pases_partido)
+            
+    except Exception as e:
+        print(f"Error procesando eventos en el archivo {file_path.name}: {e}")
+
+df_shots_master = pd.concat(lista_tiros, ignore_index=True) if lista_tiros else pd.DataFrame()
+df_passes_master = pd.concat(lista_pases_clave, ignore_index=True) if lista_pases_clave else pd.DataFrame()
+
+# =====================================================================
+# 2. EXTRACCIÓN DE PARTIDOS (MATCHES)
+# =====================================================================
+for file_path in PATH_MATCHES.glob("*.parquet"):
+    try:
+        df_match = pd.read_parquet(file_path)
+        lista_partidos.append(df_match)
+    except Exception as e:
+        print(f"Error procesando partidos en el archivo {file_path.name}: {e}")
+
+df_matches_master = pd.concat(lista_partidos, ignore_index=True) if lista_partidos else pd.DataFrame()
+
+# =====================================================================
+# 3. EXTRACCIÓN DE ALINEACIONES (LINEUPS)
+# =====================================================================
+for file_path in PATH_LINEUPS.glob("*.parquet"):
+    try:
+        df_lineup = pd.read_parquet(file_path)
+        # Extraemos el match_id del nombre del archivo para asegurar la relación tabular
+        match_id = int(file_path.stem)
+        df_lineup['match_id'] = match_id
+        lista_lineups.append(df_lineup)
+    except Exception as e:
+        print(f"Error procesando alineaciones en el archivo {file_path.name}: {e}")
+
+df_lineups_master = pd.concat(lista_lineups, ignore_index=True) if lista_lineups else pd.DataFrame()
+
+# =====================================================================
+# REPORTE DE CONTROL DE CALIDAD (QA)
+# =====================================================================
+print("\n--- REPORTE DE INGESTA DE DATOS (MUESTRA TOTAL) ---")
+print(f"Total de disparos extraídos (Todos los equipos): {len(df_shots_master)}")
+print(f"Total de pases clave asociados extraídos: {len(df_passes_master)}")
+print(f"Total de partidos procesados: {len(df_matches_master)}")
+print(f"Total de registros de alineación procesados: {len(df_lineups_master)}")
+
+# Limpieza de memoria temporal
+del df_evento, df_lineup, df_match, df_tiros_partido, df_pases_partido, file_path, lista_lineups, lista_partidos, lista_pases_clave, lista_tiros, PATH_EVENTS, PATH_MATCHES, PATH_LINEUPS, ids_pases_previos
+```
+
+La diferencia entre la muestra total de disparos y los pases clave asociados es un patrón absolutamente normal. Esta reducción en los pases clave ocurre generalmente porque el evento general de disparo engloba finalizaciones que carecen de un pasador previo, tales como las acciones directas a balón parado (como penalties o tiros libre) o jugadas individuales donde el rematador finaliza tras crear su propia ventaja posicional. 
+
+Los modelos que construiremos en este trabajo se basan en la toma de decisiones tanto del lanzador como en la del pasador. Por lo tanto, el siguiente paso consiste en filtrar los disparos para quedarnos con aquellos producidos en situación de "Open Play". Excluiremos jugadas precedidas de córner, penalties o tiros libres.
+
+
+# Filtrado de Contexto Dinámico (Open Play) y unificación de secuencias
+
+Una vez consolidada la extracción de eventos, el siguiente paso de nuestro pipeline consiste en seleccionar la muestra para alinearla con los objetivos de la investigación a realizar. Dado que buscamos evaluar la toma de decisiones tácticas y la oclusión en escenarios de juego fluido, debemos descartar aquellas finalizaciones originadas a balón parado. 
+
+Para ello, aplicamos un filtro sobre la tipología específica del disparo (shot.type), conservando de manera exclusiva los remates categorizados como "Open Play". Esta operación elimina de nuestra muestra poblacional los lanzamientos de penalti, los tiros libres directos y los saques de esquina directos, dejándonos tanto los tiros asistidos en dinámica como las jugadas individuales autónomas.
+
+Posteriormente, construimos nuestro dataset relacional de secuencias ofensivas. Mediante una operación de unión (join), enlazamos estructuralmente los pases clave con sus correspondientes disparos en "Open Play". Utilizando el identificador único del pase y la variable de enlace del disparo (shot_key_pass_id), logramos colapsar la secuencia temporal "Pase -> Tiro" en una única fila plana.
+
+```{python}
+# =====================================================================
+# 4. FILTRADO DE 'OPEN PLAY' Y JOIN DE SECUENCIAS
+# =====================================================================
+
+# Filtrar los disparos para quedarnos exclusivamente con los de 'Open Play'
+# Nota: Tras el aplanamiento del JSON, el atributo anidado de tipo de tiro suele 
+# encontrarse en la columna 'shot_type_name'.
+df_shots_open_play = df_shots_master[df_shots_master['shot_type_name'] == 'Open Play'].copy()
+
+# Ensamble de la secuencia: Join (Inner Merge) entre los pases clave y los tiros filtrados.
+# Se añaden sufijos para diferenciar columnas homónimas (ej: 'location_pass' vs 'location_shot')
+df_secuencias = pd.merge(
+    df_passes_master, 
+    df_shots_open_play, 
+    left_on='id', 
+    right_on='shot_key_pass_id', 
+    suffixes=('_pass', '_shot')
+)
+
+# =====================================================================
+# REPORTE DE CONTROL DE CALIDAD (QA) - FASE 2
+# =====================================================================
+print("\n--- REPORTE DE SECUENCIAS OPEN PLAY ---")
+print(f"Total de disparos globales iniciales: {len(df_shots_master)}")
+print(f"Total de pases clave iniciales: {len(df_passes_master)}" )
+print(f"Disparos aislados en 'Open Play': {len(df_shots_open_play)}")
+print(f"Secuencias completas ensambladas (Pase -> Tiro en Open Play): {len(df_secuencias)}")
+
+
+del df_passes_master, df_shots_master
+```
+
+Los resultados nos proporcionan un mapa claro del volumen de datos útiles para nuestro estudio. Tras aplicar el filtro de juego dinámico, disponemos de una población exacta de 882 disparos en "Open Play". Este será el conjunto de datos principal sobre el que evaluaremos la toma de decisiones, la ejecución y el posicionamiento de los rematadores, independientemente de si generaron su propia ventaja o si recibieron el balón de un compañero.
+
+Por otro lado, la operación de unión relacional nos confirma un total de 690 secuencias completas (Pase clave -> Tiro). Esta submuestra representa nuestro núcleo analítico de mayor valor para estudiar la perspectiva de los asistidores, permitiéndonos evaluar el contexto previo a la finalización y analizar cómo sus pases habilitaron el espacio para el tirador.
+
+Con los eventos de tiro filtrados y las secuencias tiro/pase construidas, el siguiente paso metodológico consistirá en dotar a estas acciones de su correspondiente contexto 360.
+
+# Integración del Contexto Espacial (StatsBomb 360)
+
+La precisión de los modelos a construir posteriormente depende intrínsecamente de la disponibilidad de las coordenadas de los jugadores en los momentos críticos de la jugada. En esta fase, integramos la capa espacial StatsBomb 360, la cual captura las ubicaciones del ecosistema de jugadores en el instante exacto de la acción.
+
+Para aislar nuestra muestra definitiva de estudio, implementamos dos operaciones de unión relacional restrictiva (inner joins) utilizando el identificador único del evento (event_uuid):
+
+1. **Disparos aislados**: Cruzamos la población de remates *Open Play* con la base de datos 360, descartando disparos que no tengan asignado freeze frame. 
+
+2. **Secuencias Pase/tiro**: Aplicamos dos uniones. Exigimos que, para analizar posteriormente estas secuencias, necesitamos el 360 del pase clave y del tiro. Si uno de los dos eventos carece del 360, la secuencia se elimina del análisis. 
+
+```{python}
+# =====================================================================
+# 5. INGESTA 360 E INTEGRACIÓN ESPACIAL BIDIRECCIONAL
+# =====================================================================
+PATH_360 = Path("../data/processed/three-sixty")
+lista_360 = []
+
+# Cargar todos los archivos 360
+for file_path in PATH_360.glob("*.parquet"):
+    try:
+        df_360 = pd.read_parquet(file_path)
+        lista_360.append(df_360)
+    except Exception as e:
+        print(f"Error procesando frames 360 en {file_path.name}: {e}")
+
+df_360_master = pd.concat(lista_360, ignore_index=True) if lista_360 else pd.DataFrame()
+
+# Identificamos el nombre exacto de la columna clave en 360 (según especificación es event_uuid)
+col_uuid_360 = 'event_uuid' if 'event_uuid' in df_360_master.columns else 'id'
+
+# ---------------------------------------------------------------------
+# A) JOIN: Disparos individuales + 360
+# ---------------------------------------------------------------------
+df_shots_360 = pd.merge(
+    df_shots_open_play, 
+    df_360_master, 
+    left_on='id', 
+    right_on=col_uuid_360, 
+    how='inner'  # Solo nos quedamos los que hagan match
+)
+
+# ---------------------------------------------------------------------
+# B) JOIN DUAL: Secuencias (Pase + Tiro) + 360 en ambas acciones
+# ---------------------------------------------------------------------
+# Paso B1: Cruzar el ID del pase con el dataframe 360
+df_secuencias_mitad = pd.merge(
+    df_secuencias,
+    df_360_master,
+    left_on='id_pass',  # Asumiendo que el sufijo del bloque anterior dejó esta columna
+    right_on=col_uuid_360,
+    how='inner'
+)
+
+# Paso B2: Cruzar el ID del tiro con el dataframe 360 sobre el df resultante
+# Utilizamos sufijos espaciales para separar el frame del pase del frame del tiro
+df_secuencias_completas_360 = pd.merge(
+    df_secuencias_mitad,
+    df_360_master,
+    left_on='id_shot', 
+    right_on=col_uuid_360,
+    how='inner',
+    suffixes=('_360_pass', '_360_shot')
+)
+
+# =====================================================================
+# REPORTE DE CONTROL DE CALIDAD (QA) - FASE 3
+# =====================================================================
+print("\n--- REPORTE DE INTEGRACIÓN ESPACIAL 360 ---")
+print(f"Tiros 'Open Play' originales: {len(df_shots_open_play)}")
+print(f"Tiros 'Open Play' con contexto 360: {len(df_shots_360)}")
+print("-" * 40)
+print(f"Secuencias Pase->Tiro originales: {len(df_secuencias)}")
+print(f"Secuencias perfectas (360 en Pase Y Tiro): {len(df_secuencias_completas_360)}")
+
+del df_360_master, df_360, df_secuencias, df_secuencias_mitad, df_shots_open_play, PATH_360, lista_360, file_path
+```
+
+Para la rama del estudio centrada en el comportamiento de los finalizadores, la muestra definitiva consolida 858 disparos dinámicos con cobertura espacial absoluta. Esto representa una retención excepcional del 93.6% sobre el volumen ofensivo global inicial de la competición (916 tiros totales), alcanzando un asombroso 97.3% de eficacia si acotamos la métrica exclusivamente a los 882 remates originados en estricto Open Play.
+
+Por otro lado, para el segundo enfoque de la investigación sobre la toma de decisiones de los pasadores, tenemos un total de 600 secuencias de pase y tiro con el 360 integrado. Esto significa que logramos retener el 87% de los 690 pases clave originales.
+
+Con los dataset finales ya creados, el siguiente objetivo será elegir las variables necesarias para comenzar el análisis en profundidad para la creación de nuevas métricas.
+
+# Selección de Variables
+
+En esta etapa final del pre-procesamiento, vamos a elegir las variables sólamente necesarias de cada dataframe para reducir la dimensionalidad. Sólamente conservaremos las variables necesarias tanto para la creación de nuevas métricas como para la posterior validación. 
+
+
+```{python}
+# =====================================================================
+# 6. SELECCIÓN DE VARIABLES (FEATURE SELECTION)
+# =====================================================================
+
+# 1. Matches: Contexto competitivo básico para el dashboard
+cols_matches = [
+    'match_id', 'match_date','kick_off', 'competition_competition_name', 
+    'season_season_name', 'home_team_home_team_name', 'away_team_away_team_name', 
+    'home_score', 'away_score', 'stadium_name', 'referee_name'
+]
+# Filtramos asegurando que las columnas existan tras el aplanamiento
+df_matches_final = df_matches_master[[c for c in cols_matches if c in df_matches_master.columns]].copy()
+
+# 2. Lineups: Diccionario relacional de jugadores
+cols_lineups = [
+    'team_name', 'lineup', 'match_id'
+]
+df_lineups_final = df_lineups_master[[c for c in cols_lineups if c in df_lineups_master.columns]].copy()
+
+# 3. Shots 360: Evaluación geométrica del finalizador
+# =====================================================================
+# 4.1. SELECCIÓN DE VARIABLES: SHOTS 360
+# =====================================================================
+
+cols_shots = [
+    # Identificación temporal y de actor
+    'match_id',
+    'id', 
+    'period', 
+    'minute', 
+    'second', 
+    'team_name', 
+    'player_name', 
+    
+    # Coordenadas y geometría del disparo
+    'location', 
+    'shot_end_location', 
+    
+    # Contexto y ejecución técnica
+    'under_pressure', 
+    'shot_first_time', 
+    'shot_open_goal', 
+    'shot_body_part_name', 
+    'shot_technique_name', 
+    
+    # Rendimiento
+    'shot_statsbomb_xg', 
+    'shot_outcome_name', 
+    
+    # Enlace relacional (por si se necesita trazar de vuelta)
+    'shot_key_pass_id',
+    
+    # Capa espacial 360
+    'visible_area', 
+    'freeze_frame'
+]
+
+# Aplicamos el filtro al dataframe
+df_shots_360_final = df_shots_360[cols_shots].copy()
+
+# 4. Secuencias Completas (Pase -> Tiro): Evaluación de la decisión del pasador
+# Al venir de un join con sufijos ('_pass', '_shot'), adaptamos los nombres
+cols_secuencias = [
+    # Metadatos del partido y temporales
+    'match_id_pass', 
+    'id_pass', 
+    'minute_pass', 
+    'second_pass', 
+    'team_name_pass',
+    
+    # Identificación y contexto del Pasador
+    'player_id_pass',
+    'player_name_pass', 
+    'under_pressure_pass',
+    
+    # Geometría y tipo del Pase
+    'location_pass', 
+    'pass_end_location_pass', 
+    'pass_length_pass', 
+    'pass_angle_pass', 
+    'pass_height_name_pass',
+    'pass_cross_pass',
+    'pass_cut_back_pass',
+    'pass_switch_pass',
+    
+    # Capa Espacial 360 del Pase (Toma de decisión)
+    'visible_area_360_pass',
+    'freeze_frame_360_pass',
+    
+    # Identificación y contexto del Tirador
+    'id_shot',
+    'player_id_shot',
+    'player_name_shot',
+    'under_pressure_shot',
+    
+    # Geometría, ejecución y rendimiento del Tiro
+    'location_shot', 
+    'shot_end_location_shot', 
+    'shot_first_time_shot',
+    'shot_open_goal_shot',
+    'shot_body_part_name_shot',
+    'shot_technique_name_shot',
+    'shot_statsbomb_xg_shot', 
+    'shot_outcome_name_shot',
+    
+    # Capa Espacial 360 del Tiro (Consecuencia)
+    'visible_area_360_shot',
+    'freeze_frame_360_shot'
+]
+df_secuencias_final = df_secuencias_completas_360[cols_secuencias].copy()
+
+```
+
+# Exportación de los Datasets
+
+
+```{python}
+#| eval: false
+#| echo: true
+#| warning: false
+
+# Guardado final optimizado
+df_matches_final.to_parquet("../data/processed/matches_metadata.parquet", index=False)
+df_lineups_final.to_parquet("../data/processed/lineups_metadata.parquet", index=False)
+df_shots_360_final.to_parquet("../data/processed/shots_360_analysis.parquet", index=False)
+df_secuencias_final.to_parquet("../data/processed/shots_pass_360_analysis.parquet", index=False)
+```
