@@ -1,0 +1,39 @@
+name: statsbomb_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Core de Python
+  - python=3.10
+  
+  # Manipulación y Estructuras de Datos
+  - pandas>=2.0.0
+  - numpy
+  
+  # Serialización y Formatos (Conversión a Parquet)
+  - pyarrow       # Motor ultrarrápido recomendado para pandas.to_parquet()
+  - fastparquet   # Motor alternativo por si hay conflictos de lectura
+  
+  # Visualización Clásica y Avanzada
+  - matplotlib
+  - seaborn
+  - plotly        # Fundamental para gráficos interactivos en Streamlit
+  
+  # Ecosistema Streamlit
+  - streamlit
+  - watchdog      # Para recarga automática al guardar en Streamlit
+  
+  # Herramientas de Machine Learning / Ciencia de Datos
+  - scikit-learn
+  - scipy
+  
+  # Entorno de desarrollo interactivo
+  - jupyterlab
+  - ipykernel
+  
+  # Librerías específicas vía pip
+  - pip
+  - pip:
+      - statsbombpy       # API oficial para descargar los JSON directamente si lo necesitas
+      - mplsoccer         # Imprescindible para dibujar campos de fútbol y mapas de pases/360
+      - streamlit-extras  # Componentes adicionales para hacer la UI de Streamlit más atractiva

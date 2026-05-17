@@ -1,0 +1,85 @@
+project:
+  type: book
+  output-dir: docs
+
+book:
+  title: "Título Provisional : Análisis Ofensivo del Bayer Leverkusen"
+  subtitle: "Últimas Tendencias en el Análisis de Datos Deportivos  | Máster en Análisis de Datos Deportivos"
+  author: 
+    - "Alba Martínez de la Hermosa"
+    - "Daniel Lopez Paredes"
+    - "Alonso González Romero"
+  date: today
+  date-format: "D [de] MMMM, YYYY"
+  downloads: [pdf]
+  chapters:
+    - index.qmd
+    - notebooks/01_data_preprocessing.qmd
+
+execute:
+  freeze: auto    
+  warning: false
+
+format:
+  html:
+    theme: cosmo
+    css: style.css
+    toc: true
+    toc-title: "Índice de contenidos"
+    number-sections: true
+    code-fold: true                    
+    code-summary: "Ver código"
+    echo: true                         
+
+  pdf:
+    echo: false                       
+    toc: true
+    number-sections: true
+    colorlinks: true
+    papersize: a4
+    pdf-engine: xelatex                
+    geometry:
+      - top=35mm
+      - left=25mm
+      - right=25mm
+      - bottom=25mm
+    include-in-header:
+      text: |
+        \usepackage{fancyhdr}
+        \usepackage{titling}
+        \usepackage{graphicx}
+
+        % --- 1. CONFIGURACIÓN CABECERA (Logo MUSA en todas las páginas) ---
+        \pagestyle{fancy}
+        \fancyhf{}
+        \fancyhead[L]{\small \nouppercase{\leftmark}} 
+        \fancyhead[R]{\includegraphics[height=1cm]{MUSA.png}} 
+        \fancyfoot[C]{\thepage}
+        \renewcommand{\headrulewidth}{0.4pt}
+        \setlength{\headheight}{30pt}
+
+        % Esto fuerza que el logo salga incluso en las páginas donde empieza un capítulo
+        \fancypagestyle{plain}{
+          \fancyhf{}
+          \fancyhead[R]{\includegraphics[height=1cm]{MUSA.png}}
+          \fancyfoot[C]{\thepage}
+          \renewcommand{\headrulewidth}{0pt}
+        }
+
+        % --- 2. CONFIGURACIÓN DE PORTADA ESTILO TFM ---
+        \pretitle{
+          \begin{center}
+          \includegraphics[width=6cm]{URJC_logo.svg.png}\\[1.5cm]
+          \LARGE\bfseries
+        }
+        \posttitle{
+          \\[0.5cm]
+          \Large\normalfont \textit{Asignatura: Últimas Tendencias en el Análisis de Datos Deportivos} \\
+          \vfill
+          \end{center}
+        }
+        
+        \preauthor{\begin{center}\large \begin{tabular}{c}}
+        \postauthor{\end{tabular}\end{center}}
+
+jupyter: python3
