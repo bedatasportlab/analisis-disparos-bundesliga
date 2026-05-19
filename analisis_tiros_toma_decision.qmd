@@ -1,0 +1,1772 @@
+---
+title: "Análisis de la toma de decisión en Tiros en la Bundesliga 2023/24"
+author:
+  - Alonso González Romero
+  - Daniel López Paredes
+  - Alba Martínez de la Hermosa
+date: today
+format:
+  html:
+    page-layout: full  
+    css: style.css
+    code-fold: true
+    code-summary: "Mostrar código"
+
+    embed-resources: true
+    plotly-connected: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+lang: es
+abstract: |
+    En este análisis, exploramos la toma de decisiones en los tiros realizados durante la temporada 2023/24 de la Bundesliga. Utilizando datos detallados de eventos, examinamos cómo los jugadores eligen cuándo y dónde disparar, y cómo estas decisiones afectan el resultado del juego. A través de visualizaciones interactivas y análisis estadísticos, buscamos identificar patrones y tendencias en la toma de decisiones de los jugadores, proporcionando insights valiosos para entrenadores, analistas y aficionados al fútbol.
+---
+
+# Introducción
+
+# Importamos las librerías necesarias
+
+```{python}
+import pandas as pd
+import json
+import numpy as np
+import mplsoccer
+from mplsoccer import Sbopen
+from mplsoccer import Sblocal
+from mplsoccer import Pitch
+import matplotlib.pyplot as plt
+# from itables import show
+# import plotly.graph_objects as go
+# import numpy as np
+# import os
+# import math
+# import matplotlib.cm as cm
+# import matplotlib.patches as patches
+# import seaborn as sns
+```
+
+# Crear un DataFrame con los eventos de tiro del Bayern Leverkusen
+```{python}
+all_shots_360 = pd.read_parquet('data_processed/all_shots_360_processed.parquet')
+
+col_possesion = 'possesion_team_name'
+if col_possesion not in all_shots_360.columns:
+  col_possesion = 'possession_team_name'
+
+if col_possesion not in all_shots_360.columns:
+  raise ValueError('No existe la columna de posesion del equipo en el DataFrame.')
+
+all_shots_360 = all_shots_360[all_shots_360[col_possesion] == 'Bayer Leverkusen'].copy()
+
+cols_json = ['posiciones_compañeros', 'posiciones_rivales', 'posiciones_porteros']
+for col in cols_json:
+  if col in all_shots_360.columns:
+    all_shots_360[col] = all_shots_360[col].apply(
+      lambda x: json.loads(x) if isinstance(x, str) and x else (x if isinstance(x, list) else [])
+    )
+
+shots_360_limpio = all_shots_360.copy()
+
+shots_360_limpio.head()
+```
+
+# Métricas geométricas de tiro
+
+En esta sección se implementan, paso a paso, las métricas espaciales para que queden guardadas en el DataFrame:
+
+- Distancia del disparo al centro de la portería (`distancia_centro_porteria`).
+- Ángulo de tiro con la portería (`angulo_porteria`).
+- Rivales dentro del ángulo balón-portería (`rivales_en_angulo` y `num_rivales_angulo`).
+- Distancia al rival más cercano dentro de ese ángulo (`distancia_rival_mas_cercano`).
+
+## Paso 1. Distancia del disparo al centro de la portería
+
+```{python}
+shots_360_limpio['distancia_centro_porteria'] = shots_360_limpio.apply(
+  lambda row: ((120 - row['x'])**2 + (40 - row['y'])**2)**0.5,
+  axis=1,
+)
+
+shots_360_limpio[['x', 'y', 'distancia_centro_porteria']].head()
+```
+
+## Paso 2. Ángulo con la portería
+
+```{python}
+shots_360_limpio['angulo_porteria'] = shots_360_limpio.apply(
+  lambda row: np.degrees(
+    np.arccos(
+
+      np.clip(
+        (
+          (120 - row['x'])**2 + (36 - row['y']) * (44 - row['y'])
+        )
+        /
+        (
+          ((120 - row['x'])**2 + (36 - row['y'])**2)**0.5
+          *
+          ((120 - row['x'])**2 + (44 - row['y'])**2)**0.5
+        ),
+        -1.0,
+        1.0,
+      )
+    )
+  ),
+  axis=1,
+)
+
+shots_360_limpio[['x', 'y', 'angulo_porteria']].head()
+```
+
+## Paso 3. Jugadores en el ángulo balón-portería
+
+```{python}
+POSTE_1 = (120, 36)
+POSTE_2 = (120, 44)
+
+
+def punto_en_triangulo(x_player, y_player, x_ball, y_ball):
+  # El jugador debe estar por delante del balón
+  if x_player <= x_ball:
+    return False
+
+  xA, yA = x_ball, y_ball
+  xB, yB = POSTE_1
+  xC, yC = POSTE_2
+  xP, yP = x_player, y_player
+
+  delta = (yB - yC) * (xA - xC) + (xC - xB) * (yA - yC)
+  if delta == 0:
+    return False
+
+
+  w1 = ((yB - yC) * (xP - xC) + (xC - xB) * (yP - yC)) / delta
+  w2 = ((yC - yA) * (xP - xC) + (xA - xC) * (yP - yC)) / delta
+
+  return w1 >= 0 and w2 >= 0 and (w1 + w2) <= 1
+
+
+def procesar_jugadores_y_angulo(row, columna_jugadores):
+  x_ball, y_ball = row['x'], row['y']
+  lista_original = row[columna_jugadores] if isinstance(row[columna_jugadores], list) else []
+  nueva_lista_tripletas = []
+
+  for jugador in lista_original:
+    x_jugador = jugador.get('x', np.nan)
+    y_jugador = jugador.get('y', np.nan)
+
+    if pd.isna(x_jugador) or pd.isna(y_jugador):
+      continue
+
+    is_blocking = punto_en_triangulo(x_jugador, y_jugador, x_ball, y_ball)
+    nueva_lista_tripletas.append((x_jugador, y_jugador, is_blocking))
+
+  return nueva_lista_tripletas
+
+
+shots_360_limpio['rivales_en_angulo'] = shots_360_limpio.apply(
+  lambda row: procesar_jugadores_y_angulo(row, 'posiciones_rivales'),
+  axis=1,
+)
+
+shots_360_limpio['companeros_en_angulo'] = shots_360_limpio.apply(
+  lambda row: procesar_jugadores_y_angulo(row, 'posiciones_compañeros'),
+  axis=1,
+)
+
+shots_360_limpio['num_rivales_angulo'] = shots_360_limpio['rivales_en_angulo'].apply(
+  lambda lista: sum(1 for _, _, is_blocking in lista if is_blocking)
+)
+
+shots_360_limpio['num_companeros_angulo'] = shots_360_limpio['companeros_en_angulo'].apply(
+  lambda lista: sum(1 for _, _, is_blocking in lista if is_blocking)
+)
+
+shots_360_limpio['num_jugadores_angulo'] = (
+  shots_360_limpio['num_rivales_angulo'] + shots_360_limpio['num_companeros_angulo']
+)
+
+shots_360_limpio[['num_rivales_angulo', 'num_companeros_angulo', 'num_jugadores_angulo']].head()
+```
+
+## Paso 4. Distancia al rival más cercano dentro del ángulo
+
+```{python}
+def distancia_al_jugador_mas_cercano(row, columna_jugadores):
+  x_ball, y_ball = row['x'], row['y']
+  lista_jugadores = row[columna_jugadores] if isinstance(row[columna_jugadores], list) else []
+  distancias = []
+
+  for x_jugador, y_jugador, is_blocking in lista_jugadores:
+    if is_blocking:
+      distancia = ((x_jugador - x_ball)**2 + (y_jugador - y_ball)**2)**0.5
+      distancias.append(distancia)
+
+  return min(distancias) if distancias else np.nan
+
+
+shots_360_limpio['distancia_rival_mas_cercano'] = shots_360_limpio.apply(
+  lambda row: distancia_al_jugador_mas_cercano(row, 'rivales_en_angulo'),
+  axis=1,
+)
+
+shots_360_limpio[['num_rivales_angulo', 'distancia_rival_mas_cercano']].head()
+```
+
+## Paso 5. Comprobación final de columnas guardadas
+
+```{python}
+columnas_metricas = [
+  'distancia_centro_porteria',
+  'angulo_porteria',
+  'num_rivales_angulo',
+  'num_companeros_angulo',
+  'num_jugadores_angulo',
+  'distancia_rival_mas_cercano',
+]
+
+shots_360_limpio[columnas_metricas].head()
+
+# Si prefieres usar el nombre original del DataFrame en celdas posteriores:
+all_shots_360 = shots_360_limpio.copy()
+```
+
+## Campograma de ejemplo con ángulo y rivales bloqueando
+
+```{python}
+def plot_ejemplo_angulo_rivales(df):
+  # Selecciona un tiro con al menos un rival dentro del ángulo; si no hay, usa el primero disponible
+  candidatos = df[df['num_rivales_angulo'] > 0]
+  if candidatos.empty:
+    if df.empty:
+      print('No hay tiros disponibles para visualizar.')
+      return
+    row = df.iloc[0]
+  else:
+    row = candidatos.iloc[11]
+
+  x_ball, y_ball = row['x'], row['y']
+  angulo = row['angulo_porteria']
+  distancia_centro = row['distancia_centro_porteria']
+  distancia_min = row['distancia_rival_mas_cercano']
+
+  rivales = row['rivales_en_angulo'] if isinstance(row['rivales_en_angulo'], list) else []
+  companeros = row['companeros_en_angulo'] if isinstance(row['companeros_en_angulo'], list) else []
+
+  rivales_x = [x for x, y, _ in rivales]
+  rivales_y = [y for x, y, _ in rivales]
+  companeros_x = [x for x, y, _ in companeros]
+  companeros_y = [y for x, y, _ in companeros]
+
+  rivales_block_x = [x for x, y, is_blocking in rivales if is_blocking]
+  rivales_block_y = [y for x, y, is_blocking in rivales if is_blocking]
+  companeros_block_x = [x for x, y, is_blocking in companeros if is_blocking]
+  companeros_block_y = [y for x, y, is_blocking in companeros if is_blocking]
+
+  pitch = Pitch(pitch_type='statsbomb', line_color='black', pitch_color='white')
+  fig, ax = pitch.draw(figsize=(12, 8))
+
+  # Mostrar solo la parte derecha del campo para dar efecto de zoom.
+  ax.set_xlim(65, 120)
+
+  # Triángulo visual del ángulo balón-portería
+  ax.plot([x_ball, POSTE_1[0]], [y_ball, POSTE_1[1]], color='royalblue', linewidth=2, zorder=2)
+  ax.plot([x_ball, POSTE_2[0]], [y_ball, POSTE_2[1]], color='royalblue', linewidth=2, zorder=2)
+  ax.plot([POSTE_1[0], POSTE_2[0]], [POSTE_1[1], POSTE_2[1]], color='royalblue', linewidth=2, zorder=2)
+
+  # Balón (punto de tiro)
+  pitch.scatter([x_ball], [y_ball], ax=ax, color='black', s=120, marker='o', zorder=4)
+
+  # Rivales en rojo (más intenso dentro del ángulo)
+  if len(rivales_x) > 0:
+    pitch.scatter(rivales_x, rivales_y, ax=ax, color='#ff6b6b', s=60, alpha=0.7, zorder=3)
+  if len(rivales_block_x) > 0:
+    pitch.scatter(rivales_block_x, rivales_block_y, ax=ax, color='#c1121f', edgecolors='black', s=95, zorder=4)
+
+  # Companeros en azul (más intenso dentro del ángulo)
+  if len(companeros_x) > 0:
+    pitch.scatter(companeros_x, companeros_y, ax=ax, color='#4dabf7', s=60, alpha=0.7, zorder=3)
+  if len(companeros_block_x) > 0:
+    pitch.scatter(companeros_block_x, companeros_block_y, ax=ax, color='#1d4ed8', edgecolors='black', s=95, zorder=4)
+
+  # Rival más cercano dentro del ángulo
+  if len(rivales_block_x) > 0 and pd.notna(distancia_min):
+    distancias = [((x - x_ball)**2 + (y - y_ball)**2)**0.5 for x, y in zip(rivales_block_x, rivales_block_y)]
+    idx_min = int(np.argmin(distancias))
+    x_near = rivales_block_x[idx_min]
+    y_near = rivales_block_y[idx_min]
+
+    ax.plot([x_ball, x_near], [y_ball, y_near], color='darkorange', linestyle='--', linewidth=2, zorder=3)
+    ax.text(
+      (x_ball + x_near) / 2,
+      (y_ball + y_near) / 2,
+      f"d_min={distancia_min:.2f}",
+      color='darkorange',
+      fontsize=10,
+      bbox=dict(facecolor='white', edgecolor='darkorange', alpha=0.8),
+    )
+
+  titulo = (
+    f"Ejemplo de tiro | Angulo porteria: {angulo:.2f} grados | "
+    f"Dist. centro porteria: {distancia_centro:.2f} | "
+    f"Jugadores en angulo: {int(row['num_jugadores_angulo'])}"
+  )
+  ax.set_title(titulo, fontsize=13)
+
+  plt.show()
+
+
+plot_ejemplo_angulo_rivales(shots_360_limpio)
+```
+
+# Cálculo de métrica de Probabilidad de Gol
+
+## Cálculo de Probabilidad de Gol para el Lanzador
+
+```{python}
+LAMBDA_METRICA = 0.08
+ALPHA = 0.6
+
+if shots_360_limpio.empty:
+  raise ValueError('No hay tiros disponibles para calcular la probabilidad de gol.')
+
+# Tomamos un solo disparo de ejemplo para toda esta sección.
+tiro_ejemplo = shots_360_limpio.iloc[[1]].copy()
+
+
+def calcular_probabilidad_gol(num_rivales_angulo, distancia_rival_mas_cercano, distancia_porteria):
+  if pd.isna(distancia_porteria) or distancia_porteria <= 0:
+    return np.nan
+
+  # Si no hay defensor bloqueando, el término inverso se toma como 0.
+  if pd.isna(distancia_rival_mas_cercano) or distancia_rival_mas_cercano <= 0:
+    termino_defensor_cercano = 0.0
+  else:
+    termino_defensor_cercano = (1 - ALPHA) / distancia_rival_mas_cercano
+
+  prob = np.exp(
+    -LAMBDA_METRICA * distancia_porteria
+    -ALPHA * num_rivales_angulo
+    -termino_defensor_cercano
+  )
+
+  return float(np.clip(prob, 0.0, 1.0))
+
+
+# Para el lanzador reutilizamos directamente las métricas ya calculadas arriba.
+tiro_ejemplo['prob_gol_lanzador'] = tiro_ejemplo.apply(
+  lambda row: calcular_probabilidad_gol(
+    num_rivales_angulo=row['num_rivales_angulo'],
+    distancia_rival_mas_cercano=row['distancia_rival_mas_cercano'],
+    distancia_porteria=row['distancia_centro_porteria'],
+  ),
+  axis=1,
+)
+
+
+tabla_lanzador_prob_gol = tiro_ejemplo[[
+  'id',
+  'player_name',
+  'num_rivales_angulo',
+  'distancia_rival_mas_cercano',
+  'distancia_centro_porteria',
+  'prob_gol_lanzador',
+]].rename(columns={
+  'id': 'id_evento',
+  'player_name': 'jugador',
+  'num_rivales_angulo': 'num_rivales_angulo',
+  'distancia_rival_mas_cercano': 'distancia_rival_mas_cercano',
+  'distancia_centro_porteria': 'distancia_porteria',
+  'prob_gol_lanzador': 'probabilidad_gol',
+})
+
+tabla_lanzador_prob_gol.style.format({
+  'distancia_rival_mas_cercano': '{:.2f}',
+  'distancia_porteria': '{:.2f}',
+  'probabilidad_gol': '{:.3f}',
+}).hide(axis='index')
+```
+
+## Cálculo de Probabilidad de Gol para el resto de compañeros
+
+```{python}
+def calcular_metricas_punto(x_ref, y_ref, lista_rivales):
+  distancia_porteria = ((120 - x_ref)**2 + (40 - y_ref)**2)**0.5
+
+  numerador = (120 - x_ref)**2 + (36 - y_ref) * (44 - y_ref)
+  denominador = (
+    ((120 - x_ref)**2 + (36 - y_ref)**2)**0.5
+    *
+    ((120 - x_ref)**2 + (44 - y_ref)**2)**0.5
+  )
+  angulo = np.degrees(np.arccos(np.clip(numerador / denominador, -1.0, 1.0))) if denominador != 0 else np.nan
+
+  rivales_tripleta = []
+  for rival in (lista_rivales if isinstance(lista_rivales, list) else []):
+    x_rival = rival.get('x', np.nan)
+    y_rival = rival.get('y', np.nan)
+
+    if pd.isna(x_rival) or pd.isna(y_rival):
+      continue
+
+    is_blocking = punto_en_triangulo(x_rival, y_rival, x_ref, y_ref)
+    rivales_tripleta.append((x_rival, y_rival, is_blocking))
+
+  num_rivales = sum(1 for _, _, is_blocking in rivales_tripleta if is_blocking)
+  distancias = [
+    ((x_rival - x_ref)**2 + (y_rival - y_ref)**2)**0.5
+    for x_rival, y_rival, is_blocking in rivales_tripleta
+    if is_blocking
+  ]
+  distancia_rival_min = min(distancias) if distancias else np.nan
+  prob = calcular_probabilidad_gol(num_rivales, distancia_rival_min, distancia_porteria)
+
+  return {
+    'angulo_porteria_companero': angulo,
+    'num_rivales_angulo_companero': num_rivales,
+    'distancia_centro_porteria_companero': distancia_porteria,
+    'distancia_rival_mas_cercano_companero': distancia_rival_min,
+    'prob_gol_companero': prob,
+  }
+
+
+def calcular_metricas_companeros(row):
+  lista_companeros = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+  lista_rivales = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+  resultados = []
+
+  for idx, comp in enumerate(lista_companeros, start=1):
+    x_comp = comp.get('x', np.nan)
+    y_comp = comp.get('y', np.nan)
+
+    if pd.isna(x_comp) or pd.isna(y_comp):
+      continue
+
+    metricas = calcular_metricas_punto(x_comp, y_comp, lista_rivales)
+    metricas['id_companero_frame'] = idx
+    metricas['x_companero'] = x_comp
+    metricas['y_companero'] = y_comp
+    resultados.append(metricas)
+
+  return resultados
+
+
+tiro_ejemplo['metricas_companeros'] = tiro_ejemplo.apply(calcular_metricas_companeros, axis=1)
+
+tiro_ejemplo[['metricas_companeros']].head()
+
+companeros_detalle = []
+for _, row in tiro_ejemplo.iterrows():
+  id_evento = row.get('id', np.nan)
+  jugador_lanzador = row.get('player_name', '')
+
+  companeros_detalle.append({
+    'id_evento': id_evento,
+    'jugador': jugador_lanzador,
+    'tipo_jugador': 'Lanzador',
+    'id_companero': 0,
+    'x_companero': row.get('x', np.nan),
+    'y_companero': row.get('y', np.nan),
+    'angulo_porteria': row.get('angulo_porteria', np.nan),
+    'num_rivales_angulo': row.get('num_rivales_angulo', np.nan),
+    'distancia_rival_mas_cercano': row.get('distancia_rival_mas_cercano', np.nan),
+    'distancia_porteria': row.get('distancia_centro_porteria', np.nan),
+    'probabilidad_gol': row.get('prob_gol_lanzador', np.nan),
+    'es_lanzador': True,
+  })
+
+  for metricas_companero in (row.get('metricas_companeros', []) if isinstance(row.get('metricas_companeros', []), list) else []):
+    companeros_detalle.append({
+      'id_evento': id_evento,
+      'jugador': f"Companero {metricas_companero.get('id_companero_frame', '')}",
+      'tipo_jugador': 'Compañero visible',
+      'id_companero': metricas_companero.get('id_companero_frame', np.nan),
+      'x_companero': metricas_companero.get('x_companero', np.nan),
+      'y_companero': metricas_companero.get('y_companero', np.nan),
+      'angulo_porteria': metricas_companero.get('angulo_porteria_companero', np.nan),
+      'num_rivales_angulo': metricas_companero.get('num_rivales_angulo_companero', np.nan),
+      'distancia_rival_mas_cercano': metricas_companero.get('distancia_rival_mas_cercano_companero', np.nan),
+      'distancia_porteria': metricas_companero.get('distancia_centro_porteria_companero', np.nan),
+      'probabilidad_gol': metricas_companero.get('prob_gol_companero', np.nan),
+      'es_lanzador': False,
+    })
+
+companeros_tabla = pd.DataFrame(companeros_detalle)
+
+
+def resaltar_lanzador(row):
+  if bool(row.get('es_lanzador', False)):
+    return ['background-color: #1f2937; color: white;'] * len(row)
+  return [''] * len(row)
+
+
+companeros_tabla.style.apply(resaltar_lanzador, axis=1).format({
+  'x_companero': '{:.2f}',
+  'y_companero': '{:.2f}',
+  'angulo_porteria': '{:.2f}',
+  'num_rivales_angulo': '{:.0f}',
+  'distancia_rival_mas_cercano': '{:.2f}',
+  'distancia_porteria': '{:.2f}',
+  'probabilidad_gol': '{:.3f}',
+}).hide(axis='index')
+```
+
+## Comparación entre la Probabilidad de Gol del Lanzador y la del resto de compañeros para evaluar la decisión de tiro
+
+```{python}
+ranking_registros = []
+
+for _, row in tiro_ejemplo.iterrows():
+  id_evento = row.get('id', np.nan)
+  jugador_lanzador = row.get('player_name', '')
+
+  ranking_registros.append({
+    'id_evento': id_evento,
+    'jugador': jugador_lanzador,
+    'tipo_jugador': 'Lanzador',
+    'id_companero': 0,
+    'x': row.get('x', np.nan),
+    'y': row.get('y', np.nan),
+    'angulo_porteria': row.get('angulo_porteria', np.nan),
+    'num_rivales_angulo': row.get('num_rivales_angulo', np.nan),
+    'distancia_rival_mas_cercano': row.get('distancia_rival_mas_cercano', np.nan),
+    'distancia_porteria': row.get('distancia_centro_porteria', np.nan),
+    'probabilidad_gol': row.get('prob_gol_lanzador', np.nan),
+    'es_lanzador': True,
+  })
+
+  for metricas_companero in (row.get('metricas_companeros', []) if isinstance(row.get('metricas_companeros', []), list) else []):
+    ranking_registros.append({
+      'id_evento': id_evento,
+      'jugador': f"Companero {metricas_companero.get('id_companero_frame', '')}",
+      'tipo_jugador': 'Compañero visible',
+      'id_companero': metricas_companero.get('id_companero_frame', np.nan),
+      'x': metricas_companero.get('x_companero', np.nan),
+      'y': metricas_companero.get('y_companero', np.nan),
+      'angulo_porteria': metricas_companero.get('angulo_porteria_companero', np.nan),
+      'num_rivales_angulo': metricas_companero.get('num_rivales_angulo_companero', np.nan),
+      'distancia_rival_mas_cercano': metricas_companero.get('distancia_rival_mas_cercano_companero', np.nan),
+      'distancia_porteria': metricas_companero.get('distancia_centro_porteria_companero', np.nan),
+      'probabilidad_gol': metricas_companero.get('prob_gol_companero', np.nan),
+      'es_lanzador': False,
+    })
+
+tabla_ranking = pd.DataFrame(ranking_registros)
+tabla_ranking['ranking_probabilidad'] = tabla_ranking.groupby('id_evento')['probabilidad_gol'].rank(ascending=False, method='dense')
+tabla_ranking['mejor_prob_evento'] = tabla_ranking.groupby('id_evento')['probabilidad_gol'].transform('max')
+prob_lanzador_evento = tabla_ranking.loc[tabla_ranking['es_lanzador'], ['id_evento', 'probabilidad_gol']].set_index('id_evento')['probabilidad_gol']
+tabla_ranking['prob_lanzador_evento'] = tabla_ranking['id_evento'].map(prob_lanzador_evento)
+tabla_ranking['diferencia_vs_lanzador'] = tabla_ranking['probabilidad_gol'] - tabla_ranking['prob_lanzador_evento']
+tabla_ranking['decision_optima_tiro'] = tabla_ranking['probabilidad_gol'] >= tabla_ranking['mejor_prob_evento']
+
+tabla_ranking = tabla_ranking.sort_values(
+  ['id_evento', 'ranking_probabilidad', 'probabilidad_gol'],
+  ascending=[True, True, False],
+)
+
+def resaltar_lanzador_ranking(row):
+  if bool(row.get('es_lanzador', False)):
+    return ['background-color: #1f2937; color: white;'] * len(row)
+  return [''] * len(row)
+
+
+tabla_ranking.style.apply(resaltar_lanzador_ranking, axis=1).format({
+  'angulo_porteria': '{:.2f}',
+  'num_rivales_angulo': '{:.0f}',
+  'distancia_rival_mas_cercano': '{:.2f}',
+  'distancia_porteria': '{:.2f}',
+  'probabilidad_gol': '{:.3f}',
+  'prob_lanzador_evento': '{:.3f}',
+  'ranking_probabilidad': '{:.0f}',
+  'mejor_prob_evento': '{:.3f}',
+  'diferencia_vs_lanzador': '{:.3f}',
+}).hide(axis='index')
+```
+
+## Paso extra. Probabilidad de Gol solo con compañeros a los que se podía pasar
+
+```{python}
+RADIO_INTERCEPCION_PASE = 2.0
+
+
+def distancia_punto_a_segmento(px, py, x1, y1, x2, y2):
+  dx = x2 - x1
+  dy = y2 - y1
+  longitud_cuadrado = dx**2 + dy**2
+
+  if longitud_cuadrado == 0:
+    return ((px - x1)**2 + (py - y1)**2)**0.5, 0.0
+
+  t = ((px - x1) * dx + (py - y1) * dy) / longitud_cuadrado
+  t_clamped = max(0.0, min(1.0, t))
+  x_proy = x1 + t_clamped * dx
+  y_proy = y1 + t_clamped * dy
+  distancia = ((px - x_proy)**2 + (py - y_proy)**2)**0.5
+
+  return distancia, t
+
+
+def rivales_en_linea_de_pase(x_origen, y_origen, x_destino, y_destino, lista_rivales, radio=RADIO_INTERCEPCION_PASE):
+  rivales_cortando = []
+
+  if any(pd.isna(valor) for valor in [x_origen, y_origen, x_destino, y_destino]):
+    return rivales_cortando
+
+  for idx, rival in enumerate(lista_rivales if isinstance(lista_rivales, list) else [], start=1):
+    x_rival = rival.get('x', np.nan)
+    y_rival = rival.get('y', np.nan)
+
+    if pd.isna(x_rival) or pd.isna(y_rival):
+      continue
+
+    distancia, t = distancia_punto_a_segmento(
+      x_rival, y_rival,
+      x_origen, y_origen,
+      x_destino, y_destino,
+    )
+
+    # Solo cuenta si el rival está entre ambos jugadores, no detrás del origen ni pasado el destino.
+    if 0 < t < 1 and distancia <= radio:
+      rivales_cortando.append({
+        'id_rival_frame': idx,
+        'x': x_rival,
+        'y': y_rival,
+        'distancia_linea_pase': distancia,
+      })
+
+  return rivales_cortando
+
+
+def pase_disponible_sin_rival(x_origen, y_origen, x_destino, y_destino, lista_rivales, radio=RADIO_INTERCEPCION_PASE):
+  return len(rivales_en_linea_de_pase(x_origen, y_origen, x_destino, y_destino, lista_rivales, radio)) == 0
+
+
+ranking_pasable_registros = []
+
+for _, row in tiro_ejemplo.iterrows():
+  id_evento = row.get('id', np.nan)
+  jugador_lanzador = row.get('player_name', '')
+  x_lanzador = row.get('x', np.nan)
+  y_lanzador = row.get('y', np.nan)
+  rivales_frame = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+
+  ranking_pasable_registros.append({
+    'id_evento': id_evento,
+    'jugador': jugador_lanzador,
+    'tipo_jugador': 'Lanzador',
+    'id_companero': 0,
+    'x': x_lanzador,
+    'y': y_lanzador,
+    'pase_posible_sin_rival': True,
+    'rivales_cortando_pase': [],
+    'num_rivales_cortando_pase': 0,
+    'angulo_porteria': row.get('angulo_porteria', np.nan),
+    'num_rivales_angulo': row.get('num_rivales_angulo', np.nan),
+    'distancia_rival_mas_cercano': row.get('distancia_rival_mas_cercano', np.nan),
+    'distancia_porteria': row.get('distancia_centro_porteria', np.nan),
+    'probabilidad_gol': row.get('prob_gol_lanzador', np.nan),
+    'es_lanzador': True,
+  })
+
+  for metricas_companero in (row.get('metricas_companeros', []) if isinstance(row.get('metricas_companeros', []), list) else []):
+    x_comp = metricas_companero.get('x_companero', np.nan)
+    y_comp = metricas_companero.get('y_companero', np.nan)
+    rivales_cortando = rivales_en_linea_de_pase(x_lanzador, y_lanzador, x_comp, y_comp, rivales_frame)
+    pase_posible = len(rivales_cortando) == 0
+
+    if not pase_posible:
+      continue
+
+    metricas = calcular_metricas_punto(x_comp, y_comp, rivales_frame)
+
+    ranking_pasable_registros.append({
+      'id_evento': id_evento,
+      'jugador': f"Companero {metricas_companero.get('id_companero_frame', '')}",
+      'tipo_jugador': 'Compañero pasable',
+      'id_companero': metricas_companero.get('id_companero_frame', np.nan),
+      'x': x_comp,
+      'y': y_comp,
+      'pase_posible_sin_rival': pase_posible,
+      'rivales_cortando_pase': rivales_cortando,
+      'num_rivales_cortando_pase': len(rivales_cortando),
+      'angulo_porteria': metricas.get('angulo_porteria_companero', np.nan),
+      'num_rivales_angulo': metricas.get('num_rivales_angulo_companero', np.nan),
+      'distancia_rival_mas_cercano': metricas.get('distancia_rival_mas_cercano_companero', np.nan),
+      'distancia_porteria': metricas.get('distancia_centro_porteria_companero', np.nan),
+      'probabilidad_gol': metricas.get('prob_gol_companero', np.nan),
+      'es_lanzador': False,
+    })
+
+tabla_ranking_pasable = pd.DataFrame(ranking_pasable_registros)
+tabla_ranking_pasable['ranking_probabilidad_pasable'] = tabla_ranking_pasable.groupby('id_evento')['probabilidad_gol'].rank(
+  ascending=False,
+  method='dense',
+)
+tabla_ranking_pasable['mejor_prob_evento_pasable'] = tabla_ranking_pasable.groupby('id_evento')['probabilidad_gol'].transform('max')
+prob_lanzador_evento_pasable = tabla_ranking_pasable.loc[
+  tabla_ranking_pasable['es_lanzador'],
+  ['id_evento', 'probabilidad_gol'],
+].set_index('id_evento')['probabilidad_gol']
+tabla_ranking_pasable['prob_lanzador_evento'] = tabla_ranking_pasable['id_evento'].map(prob_lanzador_evento_pasable)
+tabla_ranking_pasable['diferencia_vs_lanzador'] = tabla_ranking_pasable['probabilidad_gol'] - tabla_ranking_pasable['prob_lanzador_evento']
+tabla_ranking_pasable['decision_optima_tiro_pasable'] = (
+  tabla_ranking_pasable['probabilidad_gol'] >= tabla_ranking_pasable['mejor_prob_evento_pasable']
+)
+
+tabla_ranking_pasable = tabla_ranking_pasable.sort_values(
+  ['id_evento', 'ranking_probabilidad_pasable', 'probabilidad_gol'],
+  ascending=[True, True, False],
+)
+
+tabla_ranking_pasable.drop(columns=['rivales_cortando_pase']).style.apply(resaltar_lanzador_ranking, axis=1).format({
+  'x': '{:.2f}',
+  'y': '{:.2f}',
+  'num_rivales_cortando_pase': '{:.0f}',
+  'angulo_porteria': '{:.2f}',
+  'num_rivales_angulo': '{:.0f}',
+  'distancia_rival_mas_cercano': '{:.2f}',
+  'distancia_porteria': '{:.2f}',
+  'probabilidad_gol': '{:.3f}',
+  'ranking_probabilidad_pasable': '{:.0f}',
+  'mejor_prob_evento_pasable': '{:.3f}',
+  'prob_lanzador_evento': '{:.3f}',
+  'diferencia_vs_lanzador': '{:.3f}',
+}).hide(axis='index')
+```
+
+## Campograma de pases válidos para el tiro de ejemplo
+
+```{python}
+def plot_pases_validos_tiro(row, tabla_pasable):
+  companeros_frame = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+  rivales_frame = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+  x_origen = row.get('x', np.nan)
+  y_origen = row.get('y', np.nan)
+
+  pitch = Pitch(pitch_type='statsbomb', line_color='black', pitch_color='white')
+  fig, ax = pitch.draw(figsize=(12, 8))
+  ax.set_xlim(55, 120)
+
+  rivales_xy = [
+    (r.get('x', np.nan), r.get('y', np.nan))
+    for r in rivales_frame
+    if not pd.isna(r.get('x', np.nan)) and not pd.isna(r.get('y', np.nan))
+  ]
+  companeros_xy = [
+    (idx, c.get('x', np.nan), c.get('y', np.nan))
+    for idx, c in enumerate(companeros_frame, start=1)
+    if not pd.isna(c.get('x', np.nan)) and not pd.isna(c.get('y', np.nan))
+  ]
+
+  ids_pasables = set(
+    tabla_pasable.loc[tabla_pasable['es_lanzador'] == False, 'id_companero']
+    .dropna()
+    .astype(int)
+    .tolist()
+  )
+
+  if len(rivales_xy) > 0:
+    pitch.scatter([x for x, _ in rivales_xy], [y for _, y in rivales_xy], ax=ax, color='#ff6b6b', s=55, alpha=0.75, zorder=3)
+
+  for idx, x_comp, y_comp in companeros_xy:
+    es_pasable = idx in ids_pasables
+    color_linea = 'darkgreen' if es_pasable else '#9ca3af'
+    alpha_linea = 0.95 if es_pasable else 0.3
+    ancho = 2.2 if es_pasable else 1.0
+    pitch.arrows(x_origen, y_origen, x_comp, y_comp, ax=ax, color=color_linea, width=ancho, headwidth=4, alpha=alpha_linea, zorder=2)
+    pitch.scatter([x_comp], [y_comp], ax=ax, color=('#16a34a' if es_pasable else '#93c5fd'), s=(80 if es_pasable else 45), alpha=(1.0 if es_pasable else 0.6), zorder=4)
+    ax.text(x_comp, y_comp, str(idx), color='black', fontsize=7, ha='center', va='center', zorder=5)
+
+  pitch.scatter([x_origen], [y_origen], ax=ax, color='black', s=120, marker='o', zorder=6)
+  ax.text(x_origen, y_origen - 2.5, 'Tirador', ha='center', fontsize=9)
+  ax.set_title(
+    f"Pases válidos desde el tirador | se mantienen {len(ids_pasables)} de {len(companeros_xy)} compañeros visibles",
+    fontsize=13,
+  )
+  plt.show()
+
+
+plot_pases_validos_tiro(tiro_ejemplo.iloc[0], tabla_ranking_pasable)
+```
+
+## Grid de campogramas por jugador en el tiro de ejemplo
+
+```{python}
+def plot_grid_jugadores_tiro(row, ncols=3):
+  companeros_frame = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+  rivales_frame = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+
+  # Candidatos: lanzador real (id frame 0) + cada compañero visible (id frame 1..N)
+  candidatos = [{'id_frame': 0, 'x': row['x'], 'y': row['y'], 'es_lanzador': True}]
+  for idx, comp in enumerate(companeros_frame, start=1):
+    x_comp = comp.get('x', np.nan)
+    y_comp = comp.get('y', np.nan)
+    if pd.isna(x_comp) or pd.isna(y_comp):
+      continue
+    candidatos.append({'id_frame': idx, 'x': x_comp, 'y': y_comp, 'es_lanzador': False})
+
+  n = len(candidatos)
+  nrows = int(np.ceil(n / ncols))
+  fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 5.0, nrows * 4.0))
+  axes = np.array(axes).reshape(-1)
+  pitch = Pitch(pitch_type='statsbomb', line_color='black', pitch_color='white')
+
+  # Posiciones válidas para dibujar jugadores del frame en todos los subplots
+  rivales_xy = [
+    (r.get('x', np.nan), r.get('y', np.nan))
+    for r in rivales_frame
+    if not pd.isna(r.get('x', np.nan)) and not pd.isna(r.get('y', np.nan))
+  ]
+  companeros_xy = [
+    (c.get('x', np.nan), c.get('y', np.nan))
+    for c in companeros_frame
+    if not pd.isna(c.get('x', np.nan)) and not pd.isna(c.get('y', np.nan))
+  ]
+
+  for ax_idx, ax in enumerate(axes):
+    if ax_idx >= n:
+      ax.axis('off')
+      continue
+
+    cand = candidatos[ax_idx]
+    x_ref, y_ref = cand['x'], cand['y']
+
+    metricas = calcular_metricas_punto(x_ref, y_ref, rivales_frame)
+    angulo = metricas['angulo_porteria_companero']
+    prob = metricas['prob_gol_companero']
+    d_min = metricas['distancia_rival_mas_cercano_companero']
+
+    # Rivales bloqueando desde la perspectiva del candidato actual
+    rivales_tripleta = []
+    for rival in rivales_frame:
+      x_rival = rival.get('x', np.nan)
+      y_rival = rival.get('y', np.nan)
+      if pd.isna(x_rival) or pd.isna(y_rival):
+        continue
+      is_blocking = punto_en_triangulo(x_rival, y_rival, x_ref, y_ref)
+      rivales_tripleta.append((x_rival, y_rival, is_blocking))
+
+    rivales_block_x = [x for x, y, b in rivales_tripleta if b]
+    rivales_block_y = [y for x, y, b in rivales_tripleta if b]
+
+    pitch.draw(ax=ax)
+    ax.set_xlim(65, 120)
+
+    # Misma representación geométrica que la gráfica del lanzador
+    ax.plot([x_ref, POSTE_1[0]], [y_ref, POSTE_1[1]], color='royalblue', linewidth=1.6, zorder=2)
+    ax.plot([x_ref, POSTE_2[0]], [y_ref, POSTE_2[1]], color='royalblue', linewidth=1.6, zorder=2)
+    ax.plot([POSTE_1[0], POSTE_2[0]], [POSTE_1[1], POSTE_2[1]], color='royalblue', linewidth=1.6, zorder=2)
+
+    if len(rivales_xy) > 0:
+      pitch.scatter([x for x, _ in rivales_xy], [y for _, y in rivales_xy], ax=ax, color='#ff6b6b', s=38, alpha=0.7, zorder=3)
+    if len(rivales_block_x) > 0:
+      pitch.scatter(rivales_block_x, rivales_block_y, ax=ax, color='#c1121f', edgecolors='black', s=58, zorder=4)
+
+    if len(companeros_xy) > 0:
+      pitch.scatter([x for x, _ in companeros_xy], [y for _, y in companeros_xy], ax=ax, color='#4dabf7', s=34, alpha=0.75, zorder=3)
+
+    # Candidato actual en negro
+    pitch.scatter([x_ref], [y_ref], ax=ax, color='black', s=78, marker='o', zorder=5)
+    ax.text(x_ref, y_ref, str(cand['id_frame']), color='black', fontsize=5, ha='center', va='center', zorder=6, fontweight='bold')
+
+    # IDs de compañeros del frame
+    for idx_comp, (x_comp, y_comp) in enumerate(companeros_xy, start=1):
+      ax.text(x_comp, y_comp, str(idx_comp), color='black', fontsize=4.3, ha='center', va='center', zorder=6, fontweight='bold')
+
+    # Distancia al rival más cercano bloqueando
+    if len(rivales_block_x) > 0 and pd.notna(d_min):
+      distancias = [((x - x_ref)**2 + (y - y_ref)**2)**0.5 for x, y in zip(rivales_block_x, rivales_block_y)]
+      idx_min = int(np.argmin(distancias))
+      x_near = rivales_block_x[idx_min]
+      y_near = rivales_block_y[idx_min]
+      ax.plot([x_ref, x_near], [y_ref, y_near], color='darkorange', linestyle='--', linewidth=1.6, zorder=3)
+
+    tipo = 'Lanzador' if cand['es_lanzador'] else f"Companero {cand['id_frame']}"
+    ax.set_title(f"{tipo} | ang={angulo:.1f} | prob={prob:.3f}", fontsize=9)
+
+  plt.tight_layout()
+  plt.show()
+
+
+plot_grid_jugadores_tiro(tiro_ejemplo.iloc[0], ncols=3)
+```
+
+# Análisis de probabilidad de asistencia con el pase previo al tiro
+
+En esta sección repetimos la lógica anterior, pero cambiando la pregunta: en lugar de evaluar si el jugador que tira tenía la mejor probabilidad de gol, evaluamos si el pase previo encontró a un receptor con alta probabilidad de marcar. Para ello usamos el evento de pase inmediatamente anterior al tiro y su propio frame 360.
+
+## Paso 1. Unir cada tiro con su pase previo y el 360 del pase
+
+```{python}
+all_pre_shot_passes_360 = pd.read_parquet('data_processed/all_pre_shot_passes_360_processed.parquet')
+all_shots_para_pases = pd.read_parquet('data_processed/all_shots_360_processed.parquet')
+
+
+def parsear_columna_json_360(df, columnas):
+  df = df.copy()
+  for col in columnas:
+    if col in df.columns:
+      df[col] = df[col].apply(
+        lambda x: json.loads(x) if isinstance(x, str) and x else (x if isinstance(x, list) else [])
+      )
+  return df
+
+
+cols_json_360 = [
+  'posiciones_compañeros',
+  'posiciones_rivales',
+  'posiciones_porteros',
+  'visible_area_360',
+  'freeze_frame_360',
+]
+
+all_pre_shot_passes_360 = parsear_columna_json_360(all_pre_shot_passes_360, cols_json_360)
+all_shots_para_pases = parsear_columna_json_360(all_shots_para_pases, cols_json_360)
+
+col_possesion_pase = 'possession_team_name'
+if col_possesion_pase not in all_pre_shot_passes_360.columns:
+  col_possesion_pase = 'possesion_team_name'
+
+if col_possesion_pase in all_pre_shot_passes_360.columns:
+  all_pre_shot_passes_360 = all_pre_shot_passes_360[
+    all_pre_shot_passes_360[col_possesion_pase] == 'Bayer Leverkusen'
+  ].copy()
+
+cols_shot_merge = [
+  'match_id', 'id', 'player_name', 'team_name', 'x', 'y', 'outcome_name',
+  'shot_statsbomb_xg', 'is_goal',
+]
+cols_shot_merge = [col for col in cols_shot_merge if col in all_shots_para_pases.columns]
+
+pases_tiro_360 = all_pre_shot_passes_360.merge(
+  all_shots_para_pases[cols_shot_merge],
+  left_on=['match_id', 'shot_id'],
+  right_on=['match_id', 'id'],
+  how='left',
+  suffixes=('_pase', '_tiro'),
+)
+
+pases_tiro_360 = pases_tiro_360.rename(columns={
+  'id': 'id_tiro_merge',
+  'player_name_pase': 'pasador',
+  'player_name_tiro': 'tirador',
+  'x_pase': 'x_pase',
+  'y_pase': 'y_pase',
+  'end_x': 'x_fin_pase',
+  'end_y': 'y_fin_pase',
+  'x_tiro': 'x_tiro',
+  'y_tiro': 'y_tiro',
+})
+
+pases_tiro_360 = pases_tiro_360[pases_tiro_360['pass_has_360'] == True].copy()
+
+pases_tiro_360[[
+  'match_id', 'shot_id', 'pass_id', 'pasador', 'tirador',
+  'x_pase', 'y_pase', 'x_fin_pase', 'y_fin_pase', 'x_tiro', 'y_tiro',
+  'pass_has_360',
+]].head()
+```
+
+## Paso 2. Seleccionar un pase de ejemplo asociado a un tiro
+
+```{python}
+candidatos_pase = pases_tiro_360[
+  (pases_tiro_360['posiciones_compañeros'].apply(lambda x: isinstance(x, list) and len(x) > 1))
+  &
+  (pases_tiro_360['posiciones_rivales'].apply(lambda x: isinstance(x, list) and len(x) > 0))
+].copy()
+
+if candidatos_pase.empty:
+  if pases_tiro_360.empty:
+    raise ValueError('No hay pases previos a tiro con 360 para analizar.')
+  pase_ejemplo = pases_tiro_360.iloc[[0]].copy()
+else:
+  pase_ejemplo = candidatos_pase.iloc[[0]].copy()
+
+pase_ejemplo[[
+  'match_id', 'shot_id', 'pass_id', 'pasador', 'tirador',
+  'x_pase', 'y_pase', 'x_fin_pase', 'y_fin_pase', 'x_tiro', 'y_tiro',
+]]
+```
+
+## Paso 3. Calcular la probabilidad de gol de cada posible receptor
+
+```{python}
+def es_actor_pase(jugador, x_pase, y_pase, tolerancia=1.5):
+  if bool(jugador.get('actor', False)):
+    return True
+
+  x_jugador = jugador.get('x', np.nan)
+  y_jugador = jugador.get('y', np.nan)
+  if pd.isna(x_jugador) or pd.isna(y_jugador) or pd.isna(x_pase) or pd.isna(y_pase):
+    return False
+
+  return ((x_jugador - x_pase)**2 + (y_jugador - y_pase)**2)**0.5 <= tolerancia
+
+
+def calcular_probabilidad_asistencia_pase(row):
+  lista_companeros = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+  lista_rivales = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+  x_pase = row.get('x_pase', np.nan)
+  y_pase = row.get('y_pase', np.nan)
+  x_fin_pase = row.get('x_fin_pase', np.nan)
+  y_fin_pase = row.get('y_fin_pase', np.nan)
+
+  resultados = []
+  for idx, comp in enumerate(lista_companeros, start=1):
+    x_comp = comp.get('x', np.nan)
+    y_comp = comp.get('y', np.nan)
+
+    if pd.isna(x_comp) or pd.isna(y_comp):
+      continue
+
+    if es_actor_pase(comp, x_pase, y_pase):
+      continue
+
+    metricas = calcular_metricas_punto(x_comp, y_comp, lista_rivales)
+    distancia_al_destino_real = (
+      ((x_comp - x_fin_pase)**2 + (y_comp - y_fin_pase)**2)**0.5
+      if pd.notna(x_fin_pase) and pd.notna(y_fin_pase)
+      else np.nan
+    )
+
+    resultados.append({
+      'id_receptor_frame': idx,
+      'x_receptor': x_comp,
+      'y_receptor': y_comp,
+      'distancia_al_destino_real': distancia_al_destino_real,
+      'angulo_porteria': metricas['angulo_porteria_companero'],
+      'num_rivales_angulo': metricas['num_rivales_angulo_companero'],
+      'distancia_rival_mas_cercano': metricas['distancia_rival_mas_cercano_companero'],
+      'distancia_porteria': metricas['distancia_centro_porteria_companero'],
+      'probabilidad_asistencia': metricas['prob_gol_companero'],
+    })
+
+  if len(resultados) > 0 and any(pd.notna(r['distancia_al_destino_real']) for r in resultados):
+    idx_receptor_real = int(np.nanargmin([r['distancia_al_destino_real'] for r in resultados]))
+    for idx, receptor in enumerate(resultados):
+      receptor['receptor_real_aproximado'] = idx == idx_receptor_real
+  else:
+    for receptor in resultados:
+      receptor['receptor_real_aproximado'] = False
+
+  return resultados
+
+
+pase_ejemplo['metricas_receptores'] = pase_ejemplo.apply(calcular_probabilidad_asistencia_pase, axis=1)
+
+receptores_detalle = []
+for _, row in pase_ejemplo.iterrows():
+  for receptor in row.get('metricas_receptores', []):
+    receptores_detalle.append({
+      'id_pase': row.get('pass_id', np.nan),
+      'id_tiro': row.get('shot_id', np.nan),
+      'pasador': row.get('pasador', ''),
+      'tirador': row.get('tirador', ''),
+      **receptor,
+    })
+
+tabla_receptores_pase = pd.DataFrame(receptores_detalle)
+
+if tabla_receptores_pase.empty:
+  raise ValueError('El pase de ejemplo no tiene receptores visibles en el frame 360.')
+
+tabla_receptores_pase['ranking_probabilidad'] = tabla_receptores_pase['probabilidad_asistencia'].rank(
+  ascending=False,
+  method='dense',
+)
+tabla_receptores_pase['mejor_probabilidad_pase'] = tabla_receptores_pase['probabilidad_asistencia'].max()
+prob_receptor_real = tabla_receptores_pase.loc[
+  tabla_receptores_pase['receptor_real_aproximado'],
+  'probabilidad_asistencia',
+]
+tabla_receptores_pase['prob_receptor_real'] = prob_receptor_real.iloc[0] if len(prob_receptor_real) > 0 else np.nan
+tabla_receptores_pase['diferencia_vs_receptor_real'] = (
+  tabla_receptores_pase['probabilidad_asistencia'] - tabla_receptores_pase['prob_receptor_real']
+)
+tabla_receptores_pase['mejor_opcion_de_pase'] = (
+  tabla_receptores_pase['probabilidad_asistencia'] >= tabla_receptores_pase['mejor_probabilidad_pase']
+)
+
+tabla_receptores_pase = tabla_receptores_pase.sort_values(
+  ['ranking_probabilidad', 'probabilidad_asistencia'],
+  ascending=[True, False],
+)
+
+
+def resaltar_receptor_real(row):
+  if bool(row.get('receptor_real_aproximado', False)):
+    return ['background-color: #1f2937; color: white;'] * len(row)
+  if bool(row.get('mejor_opcion_de_pase', False)):
+    return ['background-color: #dbeafe;'] * len(row)
+  return [''] * len(row)
+
+
+tabla_receptores_pase.style.apply(resaltar_receptor_real, axis=1).format({
+  'x_receptor': '{:.2f}',
+  'y_receptor': '{:.2f}',
+  'distancia_al_destino_real': '{:.2f}',
+  'angulo_porteria': '{:.2f}',
+  'num_rivales_angulo': '{:.0f}',
+  'distancia_rival_mas_cercano': '{:.2f}',
+  'distancia_porteria': '{:.2f}',
+  'probabilidad_asistencia': '{:.3f}',
+  'ranking_probabilidad': '{:.0f}',
+  'mejor_probabilidad_pase': '{:.3f}',
+  'prob_receptor_real': '{:.3f}',
+  'diferencia_vs_receptor_real': '{:.3f}',
+}).hide(axis='index')
+```
+
+## Paso extra. Probabilidad de asistencia solo con receptores a los que se podía pasar
+
+```{python}
+tabla_receptores_pasables = tabla_receptores_pase.copy()
+row_pase = pase_ejemplo.iloc[0]
+rivales_frame_pase = row_pase['posiciones_rivales'] if isinstance(row_pase['posiciones_rivales'], list) else []
+x_origen_pase = row_pase.get('x_pase', np.nan)
+y_origen_pase = row_pase.get('y_pase', np.nan)
+
+tabla_receptores_pasables['rivales_cortando_pase'] = tabla_receptores_pasables.apply(
+  lambda row: rivales_en_linea_de_pase(
+    x_origen_pase,
+    y_origen_pase,
+    row['x_receptor'],
+    row['y_receptor'],
+    rivales_frame_pase,
+  ),
+  axis=1,
+)
+tabla_receptores_pasables['num_rivales_cortando_pase'] = tabla_receptores_pasables['rivales_cortando_pase'].apply(len)
+tabla_receptores_pasables['pase_posible_sin_rival'] = tabla_receptores_pasables['num_rivales_cortando_pase'] == 0
+
+tabla_receptores_pasables = tabla_receptores_pasables[
+  tabla_receptores_pasables['pase_posible_sin_rival']
+].copy()
+
+if tabla_receptores_pasables.empty:
+  raise ValueError('No hay receptores pasables sin rival en la trayectoria para el pase de ejemplo.')
+
+tabla_receptores_pasables['ranking_probabilidad_pasable'] = tabla_receptores_pasables['probabilidad_asistencia'].rank(
+  ascending=False,
+  method='dense',
+)
+tabla_receptores_pasables['mejor_probabilidad_pase_pasable'] = tabla_receptores_pasables['probabilidad_asistencia'].max()
+prob_receptor_real_pasable = tabla_receptores_pasables.loc[
+  tabla_receptores_pasables['receptor_real_aproximado'],
+  'probabilidad_asistencia',
+]
+tabla_receptores_pasables['prob_receptor_real_pasable'] = (
+  prob_receptor_real_pasable.iloc[0] if len(prob_receptor_real_pasable) > 0 else np.nan
+)
+tabla_receptores_pasables['diferencia_vs_receptor_real_pasable'] = (
+  tabla_receptores_pasables['probabilidad_asistencia'] - tabla_receptores_pasables['prob_receptor_real_pasable']
+)
+tabla_receptores_pasables['mejor_opcion_de_pase_pasable'] = (
+  tabla_receptores_pasables['probabilidad_asistencia'] >= tabla_receptores_pasables['mejor_probabilidad_pase_pasable']
+)
+
+tabla_receptores_pasables = tabla_receptores_pasables.sort_values(
+  ['ranking_probabilidad_pasable', 'probabilidad_asistencia'],
+  ascending=[True, False],
+)
+
+
+def resaltar_receptor_pasable(row):
+  if bool(row.get('receptor_real_aproximado', False)):
+    return ['background-color: #1f2937; color: white;'] * len(row)
+  if bool(row.get('mejor_opcion_de_pase_pasable', False)):
+    return ['background-color: #dbeafe;'] * len(row)
+  return [''] * len(row)
+
+
+tabla_receptores_pasables.drop(columns=['rivales_cortando_pase']).style.apply(resaltar_receptor_pasable, axis=1).format({
+  'x_receptor': '{:.2f}',
+  'y_receptor': '{:.2f}',
+  'distancia_al_destino_real': '{:.2f}',
+  'num_rivales_cortando_pase': '{:.0f}',
+  'angulo_porteria': '{:.2f}',
+  'num_rivales_angulo': '{:.0f}',
+  'distancia_rival_mas_cercano': '{:.2f}',
+  'distancia_porteria': '{:.2f}',
+  'probabilidad_asistencia': '{:.3f}',
+  'ranking_probabilidad_pasable': '{:.0f}',
+  'mejor_probabilidad_pase_pasable': '{:.3f}',
+  'prob_receptor_real_pasable': '{:.3f}',
+  'diferencia_vs_receptor_real_pasable': '{:.3f}',
+}).hide(axis='index')
+```
+
+## Campograma de receptores válidos para el pase de ejemplo
+
+```{python}
+def plot_receptores_validos_pase(row, tabla_pasable):
+  companeros_frame = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+  rivales_frame = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+  x_origen = row.get('x_pase', np.nan)
+  y_origen = row.get('y_pase', np.nan)
+
+  ids_pasables = set(
+    tabla_pasable['id_receptor_frame']
+    .dropna()
+    .astype(int)
+    .tolist()
+  )
+  id_receptor_real = tabla_pasable.loc[
+    tabla_pasable['receptor_real_aproximado'],
+    'id_receptor_frame',
+  ]
+  id_receptor_real = int(id_receptor_real.iloc[0]) if len(id_receptor_real) > 0 else None
+
+  pitch = Pitch(pitch_type='statsbomb', line_color='black', pitch_color='white')
+  fig, ax = pitch.draw(figsize=(12, 8))
+  ax.set_xlim(55, 120)
+
+  rivales_xy = [
+    (r.get('x', np.nan), r.get('y', np.nan))
+    for r in rivales_frame
+    if not pd.isna(r.get('x', np.nan)) and not pd.isna(r.get('y', np.nan))
+  ]
+  if len(rivales_xy) > 0:
+    pitch.scatter([x for x, _ in rivales_xy], [y for _, y in rivales_xy], ax=ax, color='#ff6b6b', s=55, alpha=0.75, zorder=3)
+
+  total_receptores = 0
+  for idx, comp in enumerate(companeros_frame, start=1):
+    x_comp = comp.get('x', np.nan)
+    y_comp = comp.get('y', np.nan)
+    if pd.isna(x_comp) or pd.isna(y_comp) or es_actor_pase(comp, x_origen, y_origen):
+      continue
+
+    total_receptores += 1
+    es_pasable = idx in ids_pasables
+    es_real = idx == id_receptor_real
+    color_linea = 'darkgreen' if es_pasable else '#9ca3af'
+    color_punto = '#16a34a' if es_pasable else '#93c5fd'
+    marcador = '*' if es_real else 'o'
+
+    pitch.arrows(x_origen, y_origen, x_comp, y_comp, ax=ax, color=color_linea, width=(2.2 if es_pasable else 1.0), headwidth=4, alpha=(0.95 if es_pasable else 0.3), zorder=2)
+    pitch.scatter([x_comp], [y_comp], ax=ax, color=color_punto, edgecolors=('black' if es_real else None), s=(120 if es_real else 75 if es_pasable else 45), marker=marcador, alpha=(1.0 if es_pasable else 0.6), zorder=4)
+    ax.text(x_comp, y_comp, str(idx), color='black', fontsize=7, ha='center', va='center', zorder=5)
+
+  pitch.scatter([x_origen], [y_origen], ax=ax, color='black', s=120, marker='o', zorder=6)
+  ax.text(x_origen, y_origen - 2.5, 'Pasador', ha='center', fontsize=9)
+  ax.set_title(
+    f"Receptores válidos del pase | se mantienen {len(ids_pasables)} de {total_receptores} opciones visibles",
+    fontsize=13,
+  )
+  plt.show()
+
+
+plot_receptores_validos_pase(pase_ejemplo.iloc[0], tabla_receptores_pasables)
+```
+
+## Paso 4. Campograma del pase real y del tiro asociado
+
+```{python}
+def extraer_xy_frame(lista_jugadores):
+  return [
+    (jugador.get('x', np.nan), jugador.get('y', np.nan), bool(jugador.get('actor', False)))
+    for jugador in (lista_jugadores if isinstance(lista_jugadores, list) else [])
+    if not pd.isna(jugador.get('x', np.nan)) and not pd.isna(jugador.get('y', np.nan))
+  ]
+
+
+def plot_pase_y_tiro_asociado(row):
+  companeros_frame = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+  rivales_frame = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+
+  companeros_xy = extraer_xy_frame(companeros_frame)
+  rivales_xy = extraer_xy_frame(rivales_frame)
+
+  pitch = Pitch(pitch_type='statsbomb', line_color='black', pitch_color='white')
+  fig, ax = pitch.draw(figsize=(12, 8))
+
+  if len(rivales_xy) > 0:
+    pitch.scatter([x for x, _, _ in rivales_xy], [y for _, y, _ in rivales_xy], ax=ax, color='#ff6b6b', s=60, alpha=0.7, zorder=3)
+  if len(companeros_xy) > 0:
+    pitch.scatter([x for x, _, _ in companeros_xy], [y for _, y, _ in companeros_xy], ax=ax, color='#4dabf7', s=60, alpha=0.75, zorder=3)
+
+  x_pase, y_pase = row.get('x_pase', np.nan), row.get('y_pase', np.nan)
+  x_fin, y_fin = row.get('x_fin_pase', np.nan), row.get('y_fin_pase', np.nan)
+  x_tiro, y_tiro = row.get('x_tiro', np.nan), row.get('y_tiro', np.nan)
+
+  if pd.notna(x_pase) and pd.notna(y_pase):
+    pitch.scatter([x_pase], [y_pase], ax=ax, color='black', s=110, marker='o', zorder=5)
+    ax.text(x_pase, y_pase - 2.5, 'Pasador', ha='center', fontsize=9)
+
+  if pd.notna(x_pase) and pd.notna(y_pase) and pd.notna(x_fin) and pd.notna(y_fin):
+    pitch.arrows(x_pase, y_pase, x_fin, y_fin, ax=ax, color='darkgreen', width=2.2, headwidth=5, zorder=4)
+    pitch.scatter([x_fin], [y_fin], ax=ax, color='darkgreen', s=95, marker='o', zorder=5)
+
+  if pd.notna(x_tiro) and pd.notna(y_tiro):
+    pitch.scatter([x_tiro], [y_tiro], ax=ax, color='gold', edgecolors='black', s=140, marker='*', zorder=6)
+    pitch.arrows(x_tiro, y_tiro, 120, 40, ax=ax, color='goldenrod', width=1.7, headwidth=4, zorder=4)
+    ax.text(x_tiro, y_tiro + 2.5, 'Tiro asociado', ha='center', fontsize=9)
+
+  ax.set_title(
+    f"Pase previo al tiro | {row.get('pasador', '')} -> {row.get('tirador', '')}",
+    fontsize=13,
+  )
+  plt.show()
+
+
+plot_pase_y_tiro_asociado(pase_ejemplo.iloc[0])
+```
+
+## Paso 5. Campograma de la mejor opción de asistencia
+
+```{python}
+def plot_mejor_receptor_pase(row, tabla_receptores):
+  if tabla_receptores.empty:
+    print('No hay receptores visibles para visualizar.')
+    return
+
+  mejor = tabla_receptores.sort_values('probabilidad_asistencia', ascending=False).iloc[0]
+  x_ref = mejor['x_receptor']
+  y_ref = mejor['y_receptor']
+  rivales_frame = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+  companeros_frame = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+
+  metricas = calcular_metricas_punto(x_ref, y_ref, rivales_frame)
+  rivales_tripleta = []
+  for rival in rivales_frame:
+    x_rival = rival.get('x', np.nan)
+    y_rival = rival.get('y', np.nan)
+    if pd.isna(x_rival) or pd.isna(y_rival):
+      continue
+    rivales_tripleta.append((x_rival, y_rival, punto_en_triangulo(x_rival, y_rival, x_ref, y_ref)))
+
+  rivales_block_x = [x for x, y, bloquea in rivales_tripleta if bloquea]
+  rivales_block_y = [y for x, y, bloquea in rivales_tripleta if bloquea]
+  rivales_xy = extraer_xy_frame(rivales_frame)
+  companeros_xy = extraer_xy_frame(companeros_frame)
+
+  pitch = Pitch(pitch_type='statsbomb', line_color='black', pitch_color='white')
+  fig, ax = pitch.draw(figsize=(12, 8))
+  ax.set_xlim(65, 120)
+
+  ax.plot([x_ref, POSTE_1[0]], [y_ref, POSTE_1[1]], color='royalblue', linewidth=2, zorder=2)
+  ax.plot([x_ref, POSTE_2[0]], [y_ref, POSTE_2[1]], color='royalblue', linewidth=2, zorder=2)
+  ax.plot([POSTE_1[0], POSTE_2[0]], [POSTE_1[1], POSTE_2[1]], color='royalblue', linewidth=2, zorder=2)
+
+  if len(rivales_xy) > 0:
+    pitch.scatter([x for x, _, _ in rivales_xy], [y for _, y, _ in rivales_xy], ax=ax, color='#ff6b6b', s=55, alpha=0.7, zorder=3)
+  if len(rivales_block_x) > 0:
+    pitch.scatter(rivales_block_x, rivales_block_y, ax=ax, color='#c1121f', edgecolors='black', s=85, zorder=4)
+  if len(companeros_xy) > 0:
+    pitch.scatter([x for x, _, _ in companeros_xy], [y for _, y, _ in companeros_xy], ax=ax, color='#4dabf7', s=50, alpha=0.75, zorder=3)
+
+  pitch.scatter([x_ref], [y_ref], ax=ax, color='black', s=120, marker='o', zorder=5)
+  ax.text(x_ref, y_ref, str(int(mejor['id_receptor_frame'])), color='white', ha='center', va='center', fontsize=8, zorder=6)
+
+  ax.set_title(
+    f"Mejor receptor potencial | prob asistencia={mejor['probabilidad_asistencia']:.3f} | "
+    f"rivales en angulo={int(metricas['num_rivales_angulo_companero'])}",
+    fontsize=13,
+  )
+  plt.show()
+
+
+plot_mejor_receptor_pase(pase_ejemplo.iloc[0], tabla_receptores_pase)
+```
+
+## Paso 6. Grid de opciones de pase y probabilidad de asistencia
+
+```{python}
+def plot_grid_receptores_pase(row, tabla_receptores, ncols=3):
+  if tabla_receptores.empty:
+    print('No hay receptores visibles para visualizar.')
+    return
+
+  receptores = tabla_receptores.sort_values('id_receptor_frame').to_dict('records')
+  rivales_frame = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+  companeros_frame = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+
+  n = len(receptores)
+  nrows = int(np.ceil(n / ncols))
+  fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 5.0, nrows * 4.0))
+  axes = np.array(axes).reshape(-1)
+  pitch = Pitch(pitch_type='statsbomb', line_color='black', pitch_color='white')
+
+  rivales_xy = extraer_xy_frame(rivales_frame)
+  companeros_xy = extraer_xy_frame(companeros_frame)
+  x_pase, y_pase = row.get('x_pase', np.nan), row.get('y_pase', np.nan)
+
+  for ax_idx, ax in enumerate(axes):
+    if ax_idx >= n:
+      ax.axis('off')
+      continue
+
+    receptor = receptores[ax_idx]
+    x_ref = receptor['x_receptor']
+    y_ref = receptor['y_receptor']
+    prob = receptor['probabilidad_asistencia']
+
+    metricas = calcular_metricas_punto(x_ref, y_ref, rivales_frame)
+    rivales_tripleta = []
+    for rival in rivales_frame:
+      x_rival = rival.get('x', np.nan)
+      y_rival = rival.get('y', np.nan)
+      if pd.isna(x_rival) or pd.isna(y_rival):
+        continue
+      rivales_tripleta.append((x_rival, y_rival, punto_en_triangulo(x_rival, y_rival, x_ref, y_ref)))
+
+    rivales_block_x = [x for x, y, bloquea in rivales_tripleta if bloquea]
+    rivales_block_y = [y for x, y, bloquea in rivales_tripleta if bloquea]
+
+    pitch.draw(ax=ax)
+    ax.set_xlim(65, 120)
+
+    ax.plot([x_ref, POSTE_1[0]], [y_ref, POSTE_1[1]], color='royalblue', linewidth=1.5, zorder=2)
+    ax.plot([x_ref, POSTE_2[0]], [y_ref, POSTE_2[1]], color='royalblue', linewidth=1.5, zorder=2)
+    ax.plot([POSTE_1[0], POSTE_2[0]], [POSTE_1[1], POSTE_2[1]], color='royalblue', linewidth=1.5, zorder=2)
+
+    if len(rivales_xy) > 0:
+      pitch.scatter([x for x, _, _ in rivales_xy], [y for _, y, _ in rivales_xy], ax=ax, color='#ff6b6b', s=36, alpha=0.7, zorder=3)
+    if len(rivales_block_x) > 0:
+      pitch.scatter(rivales_block_x, rivales_block_y, ax=ax, color='#c1121f', edgecolors='black', s=56, zorder=4)
+    if len(companeros_xy) > 0:
+      pitch.scatter([x for x, _, _ in companeros_xy], [y for _, y, _ in companeros_xy], ax=ax, color='#4dabf7', s=32, alpha=0.75, zorder=3)
+
+    if pd.notna(x_pase) and pd.notna(y_pase):
+      pitch.arrows(x_pase, y_pase, x_ref, y_ref, ax=ax, color='darkgreen', width=1.4, headwidth=4, zorder=4)
+
+    pitch.scatter([x_ref], [y_ref], ax=ax, color='black', s=78, marker='o', zorder=5)
+    ax.text(x_ref, y_ref, str(int(receptor['id_receptor_frame'])), color='white', fontsize=6, ha='center', va='center', zorder=6)
+
+    etiqueta_real = ' | receptor real' if bool(receptor.get('receptor_real_aproximado', False)) else ''
+    ax.set_title(
+      f"Rec. {int(receptor['id_receptor_frame'])} | prob={prob:.3f}{etiqueta_real}",
+      fontsize=9,
+    )
+
+  plt.tight_layout()
+  plt.show()
+
+
+plot_grid_receptores_pase(pase_ejemplo.iloc[0], tabla_receptores_pase, ncols=3)
+```
+
+# Ranking final de mejores decisiones
+
+Este apartado aplica el criterio anterior a todos los eventos disponibles. La lectura de los resultados es:
+
+- En tiros, el aumento mide `probabilidad del tirador - mejor probabilidad de gol entre compañeros pasables`.
+- En pases, el aumento mide `probabilidad del receptor real - mejor probabilidad de asistencia entre otros receptores pasables`.
+
+## Mejores decisiones de tiro frente a opciones de pase válidas
+
+```{python}
+def es_mismo_jugador_frame(jugador, x_ref, y_ref, tolerancia=1.5):
+  if bool(jugador.get('actor', False)):
+    return True
+
+  x_jugador = jugador.get('x', np.nan)
+  y_jugador = jugador.get('y', np.nan)
+  if pd.isna(x_jugador) or pd.isna(y_jugador) or pd.isna(x_ref) or pd.isna(y_ref):
+    return False
+
+  return ((x_jugador - x_ref)**2 + (y_jugador - y_ref)**2)**0.5 <= tolerancia
+
+
+def calcular_decision_tiro_con_opciones_validas(row):
+  x_tirador = row.get('x', np.nan)
+  y_tirador = row.get('y', np.nan)
+  lista_companeros = row['posiciones_compañeros'] if isinstance(row['posiciones_compañeros'], list) else []
+  lista_rivales = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+
+  prob_tirador = calcular_probabilidad_gol(
+    num_rivales_angulo=row.get('num_rivales_angulo', np.nan),
+    distancia_rival_mas_cercano=row.get('distancia_rival_mas_cercano', np.nan),
+    distancia_porteria=row.get('distancia_centro_porteria', np.nan),
+  )
+
+  opciones_validas = []
+  for idx, comp in enumerate(lista_companeros, start=1):
+    x_comp = comp.get('x', np.nan)
+    y_comp = comp.get('y', np.nan)
+
+    if pd.isna(x_comp) or pd.isna(y_comp) or es_mismo_jugador_frame(comp, x_tirador, y_tirador):
+      continue
+
+    rivales_cortando = rivales_en_linea_de_pase(x_tirador, y_tirador, x_comp, y_comp, lista_rivales)
+    if len(rivales_cortando) > 0:
+      continue
+
+    metricas = calcular_metricas_punto(x_comp, y_comp, lista_rivales)
+    opciones_validas.append({
+      'id_companero_frame': idx,
+      'x': x_comp,
+      'y': y_comp,
+      'probabilidad_gol_opcion': metricas['prob_gol_companero'],
+    })
+
+  mejor_opcion = max([opcion['probabilidad_gol_opcion'] for opcion in opciones_validas], default=np.nan)
+  aumento = prob_tirador - mejor_opcion if pd.notna(mejor_opcion) else np.nan
+
+  return {
+    'probabilidad_gol_tirador': prob_tirador,
+    'mejor_probabilidad_gol_opcion_valida': mejor_opcion,
+    'aumento_probabilidad_gol': aumento,
+    'num_opciones_validas': len(opciones_validas),
+    'decision_tiro_mejor_que_pase_valido': pd.notna(aumento) and aumento > 0,
+  }
+
+
+registros_decision_gol = []
+
+for _, row in shots_360_limpio.iterrows():
+  resultado = calcular_decision_tiro_con_opciones_validas(row)
+  registros_decision_gol.append({
+    'match_id': row.get('match_id', np.nan),
+    'id_tiro': row.get('id', np.nan),
+    'jugador': row.get('player_name', ''),
+    'equipo': row.get('team_name', ''),
+    'resultado_tiro': row.get('outcome_name', ''),
+    'shot_statsbomb_xg': row.get('shot_statsbomb_xg', np.nan),
+    **resultado,
+  })
+
+decisiones_gol = pd.DataFrame(registros_decision_gol)
+decisiones_gol_evaluables = decisiones_gol.dropna(subset=['aumento_probabilidad_gol']).copy()
+decisiones_gol_positivas = decisiones_gol_evaluables[
+  decisiones_gol_evaluables['decision_tiro_mejor_que_pase_valido']
+].copy()
+
+volumen_jugadores_gol = (
+  decisiones_gol_evaluables
+  .groupby('jugador', as_index=False)
+  .agg(
+    tiros_evaluados=('id_tiro', 'count'),
+    prob_media_tiro=('probabilidad_gol_tirador', 'mean'),
+    mejor_opcion_valida_media=('mejor_probabilidad_gol_opcion_valida', 'mean'),
+    opciones_validas_media=('num_opciones_validas', 'mean'),
+  )
+)
+
+ranking_jugadores_gol = (
+  decisiones_gol_positivas
+  .groupby('jugador', as_index=False)
+  .agg(
+    decisiones_tiro_mejores=('id_tiro', 'count'),
+    aumento_total_prob_gol=('aumento_probabilidad_gol', 'sum'),
+    aumento_medio_prob_gol=('aumento_probabilidad_gol', 'mean'),
+  )
+)
+
+ranking_jugadores_gol = ranking_jugadores_gol.merge(volumen_jugadores_gol, on='jugador', how='left')
+ranking_jugadores_gol['pct_decisiones_tiro_mejores'] = (
+  ranking_jugadores_gol['decisiones_tiro_mejores'] / ranking_jugadores_gol['tiros_evaluados']
+)
+
+ranking_jugadores_gol = ranking_jugadores_gol.sort_values(
+  ['aumento_total_prob_gol', 'aumento_medio_prob_gol'],
+  ascending=[False, False],
+)
+
+ranking_jugadores_gol.head(15).style.format({
+  'tiros_evaluados': '{:.0f}',
+  'decisiones_tiro_mejores': '{:.0f}',
+  'aumento_total_prob_gol': '{:.3f}',
+  'aumento_medio_prob_gol': '{:.3f}',
+  'prob_media_tiro': '{:.3f}',
+  'mejor_opcion_valida_media': '{:.3f}',
+  'opciones_validas_media': '{:.2f}',
+  'pct_decisiones_tiro_mejores': '{:.1%}',
+}).hide(axis='index')
+```
+
+## Mejores decisiones de asistencia frente a receptores válidos
+
+```{python}
+def calcular_decision_pase_con_receptores_validos(row):
+  receptores = calcular_probabilidad_asistencia_pase(row)
+  if len(receptores) == 0:
+    return {
+      'probabilidad_asistencia_receptor_real': np.nan,
+      'mejor_probabilidad_asistencia_opcion_valida': np.nan,
+      'aumento_probabilidad_asistencia': np.nan,
+      'num_receptores_validos': 0,
+      'receptor_real_pasable': False,
+      'decision_pase_mejor_que_receptor_valido': False,
+    }
+
+  lista_rivales = row['posiciones_rivales'] if isinstance(row['posiciones_rivales'], list) else []
+  x_pase = row.get('x_pase', np.nan)
+  y_pase = row.get('y_pase', np.nan)
+
+  for receptor in receptores:
+    rivales_cortando = rivales_en_linea_de_pase(
+      x_pase,
+      y_pase,
+      receptor['x_receptor'],
+      receptor['y_receptor'],
+      lista_rivales,
+    )
+    receptor['pase_posible_sin_rival'] = len(rivales_cortando) == 0
+    receptor['num_rivales_cortando_pase'] = len(rivales_cortando)
+
+  receptor_real = next(
+    (receptor for receptor in receptores if receptor.get('receptor_real_aproximado', False)),
+    None,
+  )
+
+  if receptor_real is None:
+    return {
+      'probabilidad_asistencia_receptor_real': np.nan,
+      'mejor_probabilidad_asistencia_opcion_valida': np.nan,
+      'aumento_probabilidad_asistencia': np.nan,
+      'num_receptores_validos': sum(1 for receptor in receptores if receptor['pase_posible_sin_rival']),
+      'receptor_real_pasable': False,
+      'decision_pase_mejor_que_receptor_valido': False,
+    }
+
+  opciones_validas_alternativas = [
+    receptor
+    for receptor in receptores
+    if receptor['pase_posible_sin_rival']
+    and receptor['id_receptor_frame'] != receptor_real['id_receptor_frame']
+  ]
+
+  mejor_opcion = max(
+    [receptor['probabilidad_asistencia'] for receptor in opciones_validas_alternativas],
+    default=np.nan,
+  )
+  prob_receptor_real = receptor_real['probabilidad_asistencia']
+  aumento = prob_receptor_real - mejor_opcion if pd.notna(mejor_opcion) else np.nan
+  receptor_real_pasable = bool(receptor_real.get('pase_posible_sin_rival', False))
+
+  return {
+    'probabilidad_asistencia_receptor_real': prob_receptor_real,
+    'mejor_probabilidad_asistencia_opcion_valida': mejor_opcion,
+    'aumento_probabilidad_asistencia': aumento,
+    'num_receptores_validos': sum(1 for receptor in receptores if receptor['pase_posible_sin_rival']),
+    'receptor_real_pasable': receptor_real_pasable,
+    'decision_pase_mejor_que_receptor_valido': receptor_real_pasable and pd.notna(aumento) and aumento > 0,
+  }
+
+
+registros_decision_asistencia = []
+
+for _, row in pases_tiro_360.iterrows():
+  resultado = calcular_decision_pase_con_receptores_validos(row)
+  registros_decision_asistencia.append({
+    'match_id': row.get('match_id', np.nan),
+    'id_pase': row.get('pass_id', np.nan),
+    'id_tiro': row.get('shot_id', np.nan),
+    'jugador': row.get('pasador', ''),
+    'tirador': row.get('tirador', ''),
+    'resultado_tiro': row.get('outcome_name', ''),
+    'shot_statsbomb_xg': row.get('shot_statsbomb_xg', np.nan),
+    **resultado,
+  })
+
+decisiones_asistencia = pd.DataFrame(registros_decision_asistencia)
+decisiones_asistencia_evaluables = decisiones_asistencia.dropna(subset=['aumento_probabilidad_asistencia']).copy()
+decisiones_asistencia_positivas = decisiones_asistencia_evaluables[
+  decisiones_asistencia_evaluables['decision_pase_mejor_que_receptor_valido']
+].copy()
+
+volumen_jugadores_asistencia = (
+  decisiones_asistencia_evaluables
+  .groupby('jugador', as_index=False)
+  .agg(
+    pases_evaluados=('id_pase', 'count'),
+    prob_media_receptor_real=('probabilidad_asistencia_receptor_real', 'mean'),
+    mejor_opcion_valida_media=('mejor_probabilidad_asistencia_opcion_valida', 'mean'),
+    receptores_validos_media=('num_receptores_validos', 'mean'),
+  )
+)
+
+ranking_jugadores_asistencia = (
+  decisiones_asistencia_positivas
+  .groupby('jugador', as_index=False)
+  .agg(
+    decisiones_pase_mejores=('id_pase', 'count'),
+    aumento_total_prob_asistencia=('aumento_probabilidad_asistencia', 'sum'),
+    aumento_medio_prob_asistencia=('aumento_probabilidad_asistencia', 'mean'),
+  )
+)
+
+ranking_jugadores_asistencia = ranking_jugadores_asistencia.merge(volumen_jugadores_asistencia, on='jugador', how='left')
+ranking_jugadores_asistencia['pct_decisiones_pase_mejores'] = (
+  ranking_jugadores_asistencia['decisiones_pase_mejores'] / ranking_jugadores_asistencia['pases_evaluados']
+)
+
+ranking_jugadores_asistencia = ranking_jugadores_asistencia.sort_values(
+  ['aumento_total_prob_asistencia', 'aumento_medio_prob_asistencia'],
+  ascending=[False, False],
+)
+
+ranking_jugadores_asistencia.head(15).style.format({
+  'pases_evaluados': '{:.0f}',
+  'decisiones_pase_mejores': '{:.0f}',
+  'aumento_total_prob_asistencia': '{:.3f}',
+  'aumento_medio_prob_asistencia': '{:.3f}',
+  'prob_media_receptor_real': '{:.3f}',
+  'mejor_opcion_valida_media': '{:.3f}',
+  'receptores_validos_media': '{:.2f}',
+  'pct_decisiones_pase_mejores': '{:.1%}',
+}).hide(axis='index')
+```
+
+## Resumen combinado de toma de decisión
+
+```{python}
+ranking_gol_resumen = ranking_jugadores_gol[[
+  'jugador',
+  'tiros_evaluados',
+  'decisiones_tiro_mejores',
+  'aumento_total_prob_gol',
+  'aumento_medio_prob_gol',
+]].copy()
+
+ranking_asistencia_resumen = ranking_jugadores_asistencia[[
+  'jugador',
+  'pases_evaluados',
+  'decisiones_pase_mejores',
+  'aumento_total_prob_asistencia',
+  'aumento_medio_prob_asistencia',
+]].copy()
+
+ranking_combinado_decision = ranking_gol_resumen.merge(
+  ranking_asistencia_resumen,
+  on='jugador',
+  how='outer',
+).fillna(0)
+
+ranking_combinado_decision['acciones_evaluadas'] = (
+  ranking_combinado_decision['tiros_evaluados'] + ranking_combinado_decision['pases_evaluados']
+)
+ranking_combinado_decision['decisiones_mejores'] = (
+  ranking_combinado_decision['decisiones_tiro_mejores'] + ranking_combinado_decision['decisiones_pase_mejores']
+)
+ranking_combinado_decision['aumento_total_probabilidad'] = (
+  ranking_combinado_decision['aumento_total_prob_gol'] + ranking_combinado_decision['aumento_total_prob_asistencia']
+)
+ranking_combinado_decision['aumento_medio_probabilidad'] = (
+  ranking_combinado_decision['aumento_total_probabilidad']
+  /
+  ranking_combinado_decision['decisiones_mejores'].replace(0, np.nan)
+)
+
+ranking_combinado_decision = ranking_combinado_decision[
+  ranking_combinado_decision['decisiones_mejores'] > 0
+].sort_values(
+  ['aumento_total_probabilidad', 'aumento_medio_probabilidad'],
+  ascending=[False, False],
+)
+
+ranking_combinado_decision.head(15).style.format({
+  'tiros_evaluados': '{:.0f}',
+  'pases_evaluados': '{:.0f}',
+  'acciones_evaluadas': '{:.0f}',
+  'decisiones_tiro_mejores': '{:.0f}',
+  'decisiones_pase_mejores': '{:.0f}',
+  'decisiones_mejores': '{:.0f}',
+  'aumento_total_prob_gol': '{:.3f}',
+  'aumento_total_prob_asistencia': '{:.3f}',
+  'aumento_total_probabilidad': '{:.3f}',
+  'aumento_medio_probabilidad': '{:.3f}',
+}).hide(axis='index')
+```

@@ -9,6 +9,7 @@ dependencies:
   # Manipulación y Estructuras de Datos
   - pandas>=2.0.0
   - numpy
+  - tabulate
   
   # Serialización y Formatos (Conversión a Parquet)
   - pyarrow       # Motor ultrarrápido recomendado para pandas.to_parquet()

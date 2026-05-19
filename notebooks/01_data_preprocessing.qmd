@@ -4,7 +4,7 @@ title: "Preprocesamiento de los datos"
 
 En este capítulo, el objetivo será construir el conjunto de datos inicial sobre el que vamos a calcular las métricas necesarias para hacer el estudio sobre las finalizaciones y sus tiros previos. 
 
-# Ingesta y Extracción de Datos Base
+## Ingesta y Extracción de Datos Base
 
 En esta fase inicial, establecemos los cimientos de nuestro conjunto de datos analítico procesando la materia prima suministrada por StatsBomb. Dado el considerable volumen computacional que implica cargar el historial completo de eventos de una competición, implementamos una estrategia de filtrado en origen.
 
@@ -19,7 +19,7 @@ Simultáneamente, extraemos y consolidamos los datos de cada partido cargando el
 import pandas as pd
 from pathlib import Path
 import os 
-#os.chdir("notebook") # Poner si es necesario
+#os.chdir("notebooks") # Poner si es necesario
 
 # Definimos las rutas a los directorios de datos procesados
 # (Ajusta estas rutas según la estructura exacta de tus carpetas)
@@ -109,7 +109,7 @@ La diferencia entre la muestra total de disparos y los pases clave asociados es 
 Los modelos que construiremos en este trabajo se basan en la toma de decisiones tanto del lanzador como en la del pasador. Por lo tanto, el siguiente paso consiste en filtrar los disparos para quedarnos con aquellos producidos en situación de "Open Play". Excluiremos jugadas precedidas de córner, penalties o tiros libres.
 
 
-# Filtrado de Contexto Dinámico (Open Play) y unificación de secuencias
+## Filtrado de Contexto Dinámico (Open Play) y unificación de secuencias
 
 Una vez consolidada la extracción de eventos, el siguiente paso de nuestro pipeline consiste en seleccionar la muestra para alinearla con los objetivos de la investigación a realizar. Dado que buscamos evaluar la toma de decisiones tácticas y la oclusión en escenarios de juego fluido, debemos descartar aquellas finalizaciones originadas a balón parado. 
 
@@ -156,7 +156,7 @@ Por otro lado, la operación de unión relacional nos confirma un total de 690 s
 
 Con los eventos de tiro filtrados y las secuencias tiro/pase construidas, el siguiente paso metodológico consistirá en dotar a estas acciones de su correspondiente contexto 360.
 
-# Integración del Contexto Espacial (StatsBomb 360)
+## Integración del Contexto Espacial (StatsBomb 360)
 
 La precisión de los modelos a construir posteriormente depende intrínsecamente de la disponibilidad de las coordenadas de los jugadores en los momentos críticos de la jugada. En esta fase, integramos la capa espacial StatsBomb 360, la cual captura las ubicaciones del ecosistema de jugadores en el instante exacto de la acción.
 
@@ -239,7 +239,7 @@ Por otro lado, para el segundo enfoque de la investigación sobre la toma de dec
 
 Con los dataset finales ya creados, el siguiente objetivo será elegir las variables necesarias para comenzar el análisis en profundidad para la creación de nuevas métricas.
 
-# Selección de Variables
+## Selección de Variables
 
 En esta etapa final del pre-procesamiento, vamos a elegir las variables sólamente necesarias de cada dataframe para reducir la dimensionalidad. Sólamente conservaremos las variables necesarias tanto para la creación de nuevas métricas como para la posterior validación. 
 
@@ -358,7 +358,7 @@ df_secuencias_final = df_secuencias_completas_360[cols_secuencias].copy()
 
 ```
 
-# Exportación de los Datasets
+## Exportación de los Datasets
 
 
 ```{python}
