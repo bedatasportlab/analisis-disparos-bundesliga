@@ -2,9 +2,9 @@
 title: "Metodología"
 ---
 
-En este capítulo abordaremos el núcleo analítico del proyecto: la construcción de métricas geométricas y el modelado probabilístico de la toma de decisiones ofensivas. Partiendo de los datos base refinados en la fase de preprocesamiento, nuestro objetivo es cuantificar el contexto táctico de cada finalización y pase clave aprovechando la granularidad de las coordenadas de los jugadores proporcionadas por StatsBomb 360.
+En este capítulo, el objetivo reside en el cálculo de métricas sobre el contexto de los tiros basados en la posición de disparo y el contexto de la jugada a través del 360. A través de estas métricas, se define un sencillo modelo en el que se optimizan sus parámetros con el objetivo de ser lo más parecido posible a un modelo de xG. 
 
-A lo largo de estas secciones, evolucionaremos desde un modelo posicional básico (basado en distancias y ángulos puros) hacia una fórmula probabilística avanzada que integre la oclusión visual y la presión defensiva, evaluando matemáticamente cómo el ecosistema de jugadores impacta en la toma de decisión tanto del asistente como del rematador final.
+Una vez tenemos nuestro propio modelo de xG, podremos calcular, para cualquier posición del campo y contexto de jugadores, la probabilidad de meter gol. Con esta característica, seremos capaces de calcular, para cada tiro, si hacer un pase a otro compañero era mejor opción en términos de mejora de la probabilidad de gol en nuestro modelo. Se trabajará de forma análoga para los pases previos a un tiro. Se calculará la probabilidad de gol desde el punto donde llegó el pase, y se comparará con la probabilidad si se hubiera pasado a cualquier otro compañero.
 
 ## Configuración del entorno y carga de datos.
 
@@ -251,7 +251,10 @@ print(df_shots[['player_name', 'compañeros_en_cono', 'rivales_en_cono', 'jugado
 
 ### Distancia al rival más cercano dentro del ángulo de tiro
 
-Una vez que hemos filtrado los jugadores que ocupan el cono de visión del lanzador, calcularemos la intensidad de la presión defensiva. Para ello, buscamos el valor mínimo de las distancias euclidianas entre la posición del lanzador $S = (x_s, y_s)$ y la posición de cada jugador rival $R_i = (x_i, y_i)$ que se encuentre dentro del cono, según la siguiente expresión:$$d_{min} = \min_{i \in \text{cono}} \sqrt{(x_i - x_s)^2 + (y_i - y_s)^2}$$Si el conjunto de jugadores en el cono está vacío, asignaremos un valor nulo (NaN) o un valor centinela elevado, indicando que el tirador no experimenta presión cercana inmediata en su trayectoria de disparo.
+Una vez que hemos filtrado los jugadores que ocupan el cono de visión del lanzador, calcularemos la intensidad de la presión defensiva. Para ello, buscamos el valor mínimo de las distancias euclidianas entre la posición del lanzador $S = (x_s, y_s)$ y la posición de cada jugador rival $R_i = (x_i, y_i)$ que se encuentre dentro del cono, según la siguiente expresión:
+$$d_{min} = \min_{i \in \text{cono}} \sqrt{(x_i - x_s)^2 + (y_i - y_s)^2}$$
+
+Si el conjunto de jugadores en el cono está vacío, asignaremos un valor suficientemente alto: 60.0
 
 ```{python}
 
@@ -303,7 +306,7 @@ print(df_shots[['player_name', 'jugadores_en_cono', 'dist_rival_cercano_cono']].
 
 ## Fórmula: Cálculo de la probabilidad de meter gol.
 
-Antes de realizar una fórmula para estimar la probabilidad de meter gol según el contexto y distancia del lanzador a portería, vamos a revisar los rangos de valores de las 4 métricas numéricas recién calculadas. 
+Antes de realizar la fórmula para estimar la probabilidad de meter gol según el contexto y distancia del lanzador a portería, vamos a revisar los rangos de valores de las 4 métricas numéricas recién calculadas. 
 
 
 ```{python}
@@ -335,7 +338,7 @@ Una vez asegurada la explicabilidad de cada métrica en los casos más extremos,
 $$P(Gol) = \exp\left( - \lambda \cdot d_{porteria} - \alpha \cdot N_{cono} - \frac{1 - \alpha}{d_{rival}} \right)$$
 
 - Distancia al centro de la portería ($d_{porteria}$): Al estar en el exponente con signo negativo, a mayor distancia desde la ubicación del disparo hasta el centro de la portería $(120, 40)$, la probabilidad cae exponencialmente. Es el factor de "decaimiento" principal. 
-- Rivales en el cono ($N_{cono}$): Representa la oclusión física. A mayor número de rivales identificados en el freeze_frame dentro del triángulo de tiro, mayor es el valor sustraído del exponente, lo que reduce la probabilidad de gol al aumentar la probabilidad de bloqueo.  
+- Jugadores en el cono ($N_{cono}$): Representa la oclusión física. A mayor número de jugadores identificados en el freeze_frame dentro del triángulo de tiro, mayor es el valor sustraído del exponente, lo que reduce la probabilidad de gol al aumentar la probabilidad de bloqueo.  
 - Presión del rival más cercano ($d_{rival}$): Actúa como un factor de urgencia técnica. Al ser una función inversa ($\frac{1}{d_{rival}}$), cuanto menor sea la distancia al defensor (es decir, mayor presión), más grande es el término sustraído, lo que penaliza la probabilidad debido a la reducción del tiempo y espacio para una ejecución limpia.
 
 
@@ -381,7 +384,7 @@ def calcular_probabilidad_gol(num_rivales, dist_presion, dist_porteria,
 ```
 
 
-Una vez hemos definido la fórmula a utilizar, vamos a establecer los parámetros. Para ello: 
+Una vez hemos definido la fórmula a utilizar, ahora nuestro objetivo es definir la mejor combinación de parámetros que consigan mejor rendimiento respecto al modelo base de xG
 
 
 ```{python}
@@ -450,13 +453,20 @@ print(f"Mejor Alpha: {best_p[1]:.4f}")
 print(f"Correlación máxima con xG StatsBomb: {best_c:.4f}")
 ```
 
+El término $-0.179 \cdot d_{porteria}$ representa el decaimiento base. Por cada metro de distancia adicional que te alejas de la portería, el exponente sufre una penalización constante de 0.179. Es el esqueleto del modelo: un tiro desde 10 metros siempre tendrá, de base, un exponente de -1.79 antes de mirar qué hacen los defensas.
+
+El término $-0.1741 \cdot N_{cono}$ castiga cada jugador que se interpone en tu ángulo de visión hacia los palos. Como $\lambda$ y $\alpha$ son casi idénticos (0.179 frente a 0.1741), el modelo nos está diciendo que tener a un jugador más bloqueando la visión castiga tu probabilidad de gol casi lo mismo que alejar el tiro 1 metro más atrás.
+
+El término $-\frac{0.8259}{d_{rival}}$ es el más agresivo y el que define la urgencia de la toma de decisión. Al estar la distancia del rival dividiendo, su efecto se dispara cuando el defensor está muy cerca:Si el rival está a 5 metros (poca presión), la penalización es pequeña: $0.8259 / 5 = 0.165$.Si el rival te está encimando a 1 metro (presión extrema), la penalización explota a 0.8259.Para compensar esa presión de tener a un tío a un metro, tendrías que acercar el balón casi 4.6 metros hacia la portería ($0.8259 / 0.179$). Esto demuestra que el modelo pondera muchísimo el tiempo y espacio de ejecución: un tiro lejano pero totalmente libre de marca puede tener mejor xG que un tiro más cercano pero con un central echándose encima.
+
+
 ```{python}
 df_shots['formula_base'] = df_shots.apply(
     lambda row: calcular_probabilidad_gol(row['jugadores_en_cono'], row['dist_rival_cercano_cono'], row['dist_centro_porteria'], lambda_metrica=0.179, alpha=0.1741), axis=1
 )
 
 df_passes['formula_base'] = df_passes.apply(
-    lambda row: calcular_probabilidad_gol(row['jugadores_en_cono'], row['dist_rival_cercano_cono'], row['dist_centro_porteria']), axis=1
+    lambda row: calcular_probabilidad_gol(row['jugadores_en_cono'], row['dist_rival_cercano_cono'], row['dist_centro_porteria'], lambda_metrica=0.179, alpha=0.1741), axis=1
 )
 
 
@@ -486,13 +496,12 @@ plt.show()
 ```
 
 
-Los resultados obtenidos muestran una correlación de Pearson de 0.5857 y un coeficiente de determinación $R^2$ de 0.2169, lo que confirma que nuestra formula_base funciona correctamente como un modelo de referencia geométrica inicial, pero carece de la capacidad predictiva completa del modelo oficial de Expected Goals (xG) de StatsBomb. Esta discrepancia es totalmente esperada y, de hecho, refuerza la necesidad de integrar variables contextuales dinámicas. A continuación, incorporaremos la información espacial avanzada mediante el cálculo del ángulo de oclusión utilizando los datos StatsBomb 360, con el objetivo de evaluar si la inclusión de la densidad defensiva en el campo de visión del tirador permite derivar una métrica de probabilidad más robusta y potente que explique mejor el éxito en la finalización.
 
 
 
 ## Cálculo del incremento en la probabilidad de gol respecto a compañeros libres.
 
-En esta sección, el objetivo será calcular una métrica que nos explique la toma de decisión tanto de delanteros como de los asistentes (último pase). Para cada tiro/pase clave, evaluaremos dicho freeze-frame para identificar a todos los compañeros que pudieran recibir un pase desde esa posición. Si el pase no es interceptado en línea recta suponiendo que los defensores tienen un pequeño radio de 0.3, entonces, calculamos la probabilidad de meter gol desde la posición del compañero. Haremos esto para cada compañero visible y nos quedaremos con la probabilidad máxima del mejor compañero visible. Con esta probabilidad, seremos capaces de, para cada pase/tiro, calcular el incremento en la probabilidad si se hubiera tomado otra decisión. 
+En esta sección, el objetivo será calcular una métrica que nos explique la toma de decisión tanto de delanteros como de los asistentes (último pase). Para cada tiro/pase clave, evaluaremos dicho freeze-frame para identificar a todos los compañeros que pudieran recibir un pase desde esa posición. Si el pase no es interceptado en línea recta suponiendo que los defensores tienen un pequeño radio de 1 metro, entonces, calculamos la probabilidad de meter gol desde la posición del compañero. Haremos esto para cada compañero visible y nos quedaremos con la probabilidad máxima del mejor compañero visible. Con esta probabilidad, seremos capaces de, para cada pase/tiro, calcular el incremento en la probabilidad si se hubiera tomado otra decisión. 
 
 
 ```{python}
@@ -594,7 +603,7 @@ print(f"% de pases donde otra opción habría sido mejor: {pct_passes_mejor:.2f}
 Por último, nos cargamos ambos dataframes de nuevo para la parte de resultados: 
 
 ```{python}
-#| eval:false
+#| eval: false
 
 
 df_passes.to_parquet("../data/processed/pases_post_metodologia.parquet", index=False)

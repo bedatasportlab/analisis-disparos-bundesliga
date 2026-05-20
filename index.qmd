@@ -2,4 +2,7 @@
 title: "Introducción"
 ---
 
-Pendiente de redactar
+En el análisis avanzado del rendimiento ofensivo, el modelo de Expected Goals (xG) proporcionado por StatsBomb representa un estándar de alta precisión para medir la calidad de las ocasiones de gol. Sin embargo, por definición estructural del proveedor, la métrica statsbomb_xg está anclada de manera exclusiva a los eventos catalogados como disparos. Las acciones como los pases, carecen de este valor nativo en los registros. Esta limitación técnica nos impide evaluar directamente los escenarios contrafactuales, es decir, responder a los posibles "¿y si...?".
+
+
+Para analizar objetivamente la toma de decisiones de un jugador, no basta con medir la calidad del tiro que ejecutó, resulta imperativo cuantificar la calidad de las opciones de pase que descartó. Aprovechando que la estructura de los datos 360 nos permite trabajar en el modelado espacial de la oclusión, la solución metodológica óptima pasa por el desarrollo de un modelo probabilístico propio. Al construir una fórmula optimizando sus parámetros geométricos, somos capaces de "simular" el valor xG para cualquier coordenada del campo y en cualquier instante de la jugada.  La implementación de este modelo unificado nos proporciona una métrica universal para comparar matemáticamente el tiro realizado frente al pase omitido. Gracias a esto, podemos identificar de forma empírica qué jugadores maximizan las probabilidades de éxito colectivo mediante buenas decisiones, y cuáles penalizan el ataque mostrando un mayor "ego" al finalizar jugadas de baja probabilidad ignorando a compañeros mejor posicionados.

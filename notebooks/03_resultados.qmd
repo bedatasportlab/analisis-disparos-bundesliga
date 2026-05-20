@@ -5,14 +5,15 @@ title: "Resultados"
 Para comenzar la sección de resultados importamos primeramente los parquets generados durante la sección de metodología.
 
 ```{python}
-#| eval:false
+from pathlib import Path
+import pandas as pd
+PATH_PROCESSED = Path("../data/processed")
+df_shots = pd.read_parquet(PATH_PROCESSED / "tiros_post_metodologia.parquet")
+df_passes = pd.read_parquet(PATH_PROCESSED / "pases_post_metodologia.parquet")
 
-
-df_passes.to_parquet("../data/processed/pases_post_metodologia.parquet", index=False)
-df_shots.to_parquet("../data/processed/tiros_post_metodologia.parquet", index = False)
 ```
 
-# Cálculo del incremento de la probabilidad
+## Cálculo del incremento de la probabilidad
 
 Para los análisis que se van a realizar en esta sección, primero obtendremos un nuevo valor llamado **incremento**, tanto para *df_passes*, como para *df_shots*. 
 
@@ -27,91 +28,15 @@ df_shots['incremento'] = df_shots['formula_base'] - df_shots['mejor_prob_posible
 df_passes['incremento'] = df_passes['formula_base'] - df_passes['prob_opcion_pase_tiro']
 
 print("--- Incremento en Tiros (primeras 5 filas) ---")
-print(df_shots[['player_name', 'formula_base', 'mejor_prob_posible', 'incremento']].head())
+print(df_shots[['player_name', 'formula_base', 'mejor_prob_posible', 'incremento']].head().to_markdown())
+```
+
+```{python}
 print("\n--- Incremento en Pases (primeras 5 filas) ---")
-print(df_passes[['player_name_pass', 'formula_base', 'prob_opcion_pase_tiro', 'incremento']].head())
-
-# Guardar los DataFrames actualizados
-df_shots.to_parquet('tiros_con_incremento.parquet', index=False)
-df_passes.to_parquet('pases_con_incremento.parquet', index=False)
+print(df_passes[['player_name_pass', 'formula_base', 'prob_opcion_pase_tiro', 'incremento']].head().to_markdown())
 ```
 
-# Normalización ratio gol/tiro o gol/pase
-
-Una vez tenemos la nueva métrica y antes de comparar jugadores, vamos a normalizar el número de goles totales por el número de tiros que ha hecho un jugador.
-
-```{python}
-# Tiros
-df_shots['gol'] = (df_shots['shot_outcome_name'] == 'Goal').astype(int)
-
-ranking_jugadores = df_shots.groupby('player_name').agg(
-    total_tiros=('player_name', 'count'),
-    total_goles=('gol', 'sum')
-)
-ranking_jugadores['goles_por_tiro'] = ranking_jugadores['total_goles'] / ranking_jugadores['total_tiros']
-
-# Asistencias
-df_passes['asistencia_gol'] = (df_passes['shot_outcome_name_shot'].astype(str).str.strip().str.lower() == 'goal').astype(int)
-
-ranking_pasadores = df_passes.groupby('player_name_pass').agg(
-    total_pases=('player_name_pass', 'count'),
-    total_exitos=('asistencia_gol', 'sum')
-)
-
-ranking_pasadores['exitos_por_pase'] = ranking_pasadores['total_exitos'] / ranking_pasadores['total_pases']
-```
-
-# Ránking de jugadores
-
-Una vez se han normalizado los goles según el número de tiros o pases totales que se hayan realizado, se relaciona con la métrica **incremento**.
-De esta forma creamos un ránking en el que vemos no solo quien tira o pasa mejor sino quién toma mejores decisiones.
-
-```{python}
-df_shots['incremento'] = df_shots['formula_base'] - df_shots['mejor_prob_posible']
-df_shots['gol'] = (df_shots['shot_outcome_name'].astype(str).str.strip().str.lower() == 'goal').astype(int)
-
-# Agrupamos por jugador añadiendo el incremento medio
-ranking_tiradores = df_shots.groupby('player_name').agg(
-    total_tiros=('player_name', 'count'),
-    total_goles=('gol', 'sum'),
-    incremento_medio=('incremento', 'mean') # Añadimos la media de sus decisiones
-)
-
-# Calculamos el ratio y filtramos
-ranking_tiradores['goles_por_tiro'] = ranking_tiradores['total_goles'] / ranking_tiradores['total_tiros']
-ranking_final_tiros = ranking_tiradores[ranking_tiradores['total_tiros'] >= 5]
-
-# Ordenamos por los que tienen mejor ratio de gol
-ranking_final_tiros = ranking_final_tiros.sort_values(by='goles_por_tiro', ascending=False)
-
-print("\n--- TOP JUGADORES: GOLES POR TIRO E INCREMENTO ---")
-# Reordenamos las columnas para que se vea claro
-print(ranking_final_tiros[['total_tiros', 'total_goles', 'goles_por_tiro', 'incremento_medio']].head(10))
-```
-
-```{python}
-df_passes['incremento'] = df_passes['formula_base'] - df_passes['prob_opcion_pase_tiro']
-df_passes['asistencia_gol'] = (df_passes['shot_outcome_name_shot'].astype(str).str.strip().str.lower() == 'goal').astype(int)
-
-# Agrupamos por jugador añadiendo el incremento medio
-ranking_pasadores = df_passes.groupby('player_name_pass').agg(
-    total_pases=('player_name_pass', 'count'),
-    total_asistencias=('asistencia_gol', 'sum'),
-    incremento_medio=('incremento', 'mean')
-)
-
-# Calculamos el ratio y filtramos
-ranking_pasadores['asistencias_por_pase'] = ranking_pasadores['total_asistencias'] / ranking_pasadores['total_pases']
-ranking_final_pases = ranking_pasadores[ranking_pasadores['total_pases'] >= 20]
-
-# Ordenamos por los que tienen mejor ratio de asistencia
-ranking_final_pases = ranking_final_pases.sort_values(by='asistencias_por_pase', ascending=False)
-
-print("\n--- TOP JUGADORES: ASISTENCIAS POR PASE E INCREMENTO ---")
-print(ranking_final_pases[['total_pases', 'total_asistencias', 'asistencias_por_pase', 'incremento_medio']].head(10))
-```
-
-# Recuento
+## Recuento de jugadores con incremento positivo/negativo en media
 
 ```{python}
 # TIROS
@@ -140,102 +65,236 @@ print(f"Suman (Positivo): {pases_positivos} jugadores ({(pases_positivos/total_a
 print(f"Restan (Negativo): {pases_negativos} jugadores ({(pases_negativos/total_absoluto_pasadores)*100:.1f}%)")
 ```
 
-# Gráficos
 
 ```{python}
-# Gráfico TIROS - TOP JUGADORES DEL RÁNKING
+del todos_pasadores, todos_tiradores, pases_negativos, pases_positivos, tiros_negativos, tiros_positivos, total_absoluto_pasadores, total_absoluto_tiradores
+```
 
+
+## Ránking de jugadores por media de incremento durante la temporada
+
+A continuación, vamos a calcular el Top 10 de jugadores del Bayer Leverkusen respecto a su incremento/decremento de la oportunidad de gol durante toda la temporada. Para ello: 
+
+```{python}
+df_shots = df_shots[df_shots['team_name'] == 'Bayer Leverkusen']
+df_passes = df_passes[df_passes['team_name_pass'] == 'Bayer Leverkusen']
+df_shots['gol'] = (df_shots['shot_outcome_name'].astype(str).str.strip().str.lower() == 'goal').astype(int)
+df_passes['gol'] = (df_passes['shot_outcome_name_shot'].astype(str).str.strip().str.lower() == 'goal').astype(int)
+
+ranking_incremento_tiros = df_shots.groupby('player_name').agg(
+    total_tiros = ('player_name', 'count'),
+    total_goles = ('gol', 'sum'),
+    incremento_medio= ('incremento', 'mean')
+)
+
+# Filtramos jugadores con menos de 5 tiros en toda la temporada
+
+ranking_incremento_tiros = ranking_incremento_tiros[ranking_incremento_tiros['total_tiros'] > 4]
+
+ranking_incremento_tiros= ranking_incremento_tiros.sort_values(by='incremento_medio', ascending=False)
+print("TOP MEJORES DECISORES DEL BAYERN LEVERKUSEN")
+print(ranking_incremento_tiros.head(10).to_markdown())
+
+```
+
+Observamos que el único jugador en positivo es Jonathan Tah. Este jugador, consigue, en media, durante la temporada, un incremento medio positivo. Por lo tanto, Jonathan Tah se considera el mejor decisor del Bayern Leverkusen de la temporada 23-24 ya que en media, sus decisiones de tiro eran las mejores en el momento exacto del disparo.
+
+
+```{python}
+ranking_incremento_tiros= ranking_incremento_tiros.sort_values(by='incremento_medio', ascending = True)
+
+print("TOP PEORES DECISORES DEL BAYERN LEVERKUSEN")
+print(ranking_incremento_tiros.head(10).to_markdown())
+
+```
+
+Respecto a los peores decisores, destaca Tapsoba, que realizó 12 tiros durante la temporada logrando un incremento medio negativo de un 10% aproximadamente. Por lo tanto, se puede concluir que dicho jugador fue considerablemente el que peores decisiones tomaba en cuanto a tiro en el vestuario del Leverkusen.
+
+Una vez realizado el ránking para los tiradores, vamos a evaluar la calidad de la toma de decisión de los asistentes previos a un tiro, con el objetivo de revisar si esta decisión fue la mejor en el momento del pase. 
+
+```{python}
+ranking_incremento_pases = df_passes.groupby('player_name_pass').agg(
+    total_pases = ('player_name_pass', 'count'),
+    total_asistencias = ('gol', 'sum'),
+    incremento_medio= ('incremento', 'mean')
+)
+
+# Filtramos jugadores con menos de 5 tiros en toda la temporada
+
+ranking_incremento_pases = ranking_incremento_pases[ranking_incremento_pases['total_pases'] > 4]
+
+ranking_incremento_pases= ranking_incremento_pases.sort_values(by='incremento_medio', ascending=False)
+print("TOP MEJORES DECISORES DEL BAYERN LEVERKUSEN. PASES")
+print(ranking_incremento_pases.head(10).to_markdown())
+```
+
+Observamos que Nathan Tella, con 13 pases clave durante la temporada fue el mejor pasador clave que tuvo el equipo, ya que incrementaba la probabilidad de gol hasta en un 33% los pases que realmente realizó, considerándose así uno de los jugadores con mejor capacidad de toma de decisión en ese momento del juego. 
+
+Grimaldo, Frimpong, Stanisic, Boniface, Hofmann y Kossonou también logran un incremento medio mayor del 10%, lo que los sitúa como buenos decisores en el paso previo a un tiro. 
+
+
+```{python}
+ranking_incremento_pases= ranking_incremento_pases.sort_values(by='incremento_medio', ascending = True)
+
+print("TOP PEORES DECISORES DEL BAYERN LEVERKUSEN. PASES")
+print(ranking_incremento_pases.head(10).to_markdown())
+```
+
+Respecto a los peores decisores, destacamos a Patrik Schick, que, en media, su incremento es un 5% negativo, es decir, que en media, sus decissiones empeoraban la calidad del tiro en un 5%. 
+
+## Ránking de jugadores. Goles/Tiro
+
+```{python}
+# Calculamos el ratio y filtramos
+ranking_incremento_tiros['goles_por_tiro'] = ranking_incremento_tiros['total_goles'] / ranking_incremento_tiros['total_tiros']
+
+# Ordenamos por los que tienen mejor ratio de gol
+ranking_incremento_tiros = ranking_incremento_tiros.sort_values(by='goles_por_tiro', ascending=False)
+
+print("\n--- TOP JUGADORES: GOLES POR TIRO E INCREMENTO ---")
+# Reordenamos las columnas para que se vea claro
+print(ranking_incremento_tiros[['total_tiros', 'total_goles', 'goles_por_tiro', 'incremento_medio']].head(10).to_markdown())
+```
+
+Parece no existir una relación entre el incremento de probabilidad y el ratio tiros/goles. Lo vemos en un gráfico: 
+
+```{python}
+import seaborn as sns
+import matplotlib.pyplot as plt
+from scipy.stats import pearsonr
+
+r, p_valor = pearsonr(ranking_incremento_tiros['goles_por_tiro'], ranking_incremento_tiros['incremento_medio'])
+
+# 2. Creamos la figura
 plt.figure(figsize=(10, 6))
 
-# Usamos regplot para dibujar los puntos y la línea de correlación
-sns.regplot(data=ranking_final_tiros, x='goles_por_tiro', y='incremento_medio', 
-            color='dodgerblue', 
-            scatter_kws={'s': 100, 'alpha': 0.7},
-            line_kws={'color': 'darkred', 'linewidth': 2})
+# 3. Usamos scatterplot en lugar de regplot para quitar la línea y la banda
+sns.scatterplot(data=ranking_incremento_tiros, 
+                x='goles_por_tiro', 
+                y='incremento_medio', 
+                color='dodgerblue', 
+                s=100, 
+                alpha=0.7)
 
 plt.title('Tiros: Goles por Tiro vs Incremento Medio', fontsize=14, fontweight='bold')
 plt.xlabel('Efectividad (Goles por Tiro)', fontsize=12)
 plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
 
-# Añadimos el nombre a los 5 mejores tiradores para destacarlos
-top_tiradores = ranking_final_tiros.sort_values(by='goles_por_tiro', ascending=False).head(5)
+# 4. Añadimos una caja de texto con la correlación
+# Usamos transform=plt.gca().transAxes para colocarlo en coordenadas relativas (0 a 1) 
+# y que siempre quede en la misma esquina independientemente de los datos
+texto_stats = f"Correlación (r): {r:.2f}\nP-Valor: {p_valor:.3f}"
+plt.text(0.05, 0.95, texto_stats, transform=plt.gca().transAxes, 
+         fontsize=11, verticalalignment='top', 
+         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='lightgray'))
+
+# 5. Añadimos el nombre a los 5 mejores tiradores para destacarlos
+top_tiradores = ranking_incremento_tiros.sort_values(by='goles_por_tiro', ascending=False).head(5)
 for jugador, row in top_tiradores.iterrows():
     plt.text(row['goles_por_tiro'] + 0.005, row['incremento_medio'], str(jugador), 
              fontsize=9, color='black', weight='bold')
 
 plt.tight_layout()
-plt.savefig('grafico_tiros.png', dpi=300)
-plt.show()
-
-# Gráfico TIROS - TODOS LOS JUGADORES
-
-plt.figure(figsize=(10, 6))
-
-# Usamos 'ranking_tiradores' que contiene a todos sin filtros
-sns.regplot(data=ranking_tiradores, x='goles_por_tiro', y='incremento_medio', 
-            color='dodgerblue', 
-            scatter_kws={'s': 80, 'alpha': 0.6},
-            line_kws={'color': 'darkred', 'linewidth': 2})
-
-plt.title('Tiros: Goles por Tiro vs Incremento Medio (Todos)', fontsize=14, fontweight='bold')
-plt.xlabel('Efectividad (Goles por Tiro)', fontsize=12)
-plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
-
-top_tiradores = ranking_tiradores.sort_values(by='goles_por_tiro', ascending=False).head(5)
-for jugador, row in top_tiradores.iterrows():
-    plt.text(row['goles_por_tiro'] + 0.005, row['incremento_medio'], str(jugador), 
-             fontsize=9, color='black', weight='bold')
-
-plt.tight_layout()
-plt.savefig('grafico_tiros_todos.png', dpi=300)
+plt.savefig('../img/grafico_tiros.png', dpi=300)
 plt.show()
 ```
 
+
+Observamos que realmente, no existe una relación entre ambas variables. 
+
+
+## Ránking de jugadores. Pases/Asistencia
+
 ```{python}
-# Gráfico PASES - TOP JUGADORES DEL RANKING
+# Calculamos el ratio y filtramos
+ranking_incremento_pases['asistencias_por_pase'] = ranking_incremento_pases['total_asistencias'] / ranking_incremento_pases['total_pases']
+
+# Ordenamos por los que tienen mejor ratio de gol
+ranking_incremento_pases = ranking_incremento_pases.sort_values(by='asistencias_por_pase', ascending=False)
+
+print("\n--- TOP JUGADORES: ASISTENCIAS POR  E INCREMENTO ---")
+# Reordenamos las columnas para que se vea claro
+print(ranking_incremento_pases[['total_pases', 'total_asistencias', 'asistencias_por_pase', 'incremento_medio']].head(10).to_markdown())
+```
+
+Tampoco parece haber relación. Lo comprobamos con una gráfica y el coeficiente de correlación lineal. 
+
+```{python}
+# 1. Calculamos la correlación de Pearson y el p-valor
+# (Si tuvieras algún valor nulo (NaN), recuerda usar .dropna() en las columnas antes de esto)
+r, p_valor = pearsonr(ranking_incremento_pases['asistencias_por_pase'], ranking_incremento_pases['incremento_medio'])
 
 plt.figure(figsize=(10, 6))
 
-sns.regplot(data=ranking_final_pases, x='asistencias_por_pase', y='incremento_medio', 
-            color='mediumseagreen', 
-            scatter_kws={'s': 100, 'alpha': 0.7}, 
-            line_kws={'color': 'darkred', 'linewidth': 2})
+# 2. Usamos scatterplot para quitar la línea de tendencia y la banda de confianza
+sns.scatterplot(data=ranking_incremento_pases, 
+                x='asistencias_por_pase', 
+                y='incremento_medio', 
+                color='mediumseagreen', 
+                s=100, 
+                alpha=0.7)
 
 plt.title('Pases: Asistencias por Pase vs Incremento Medio', fontsize=14, fontweight='bold')
 plt.xlabel('Efectividad (Asistencias por Pase)', fontsize=12)
 plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
 
-# Añadimos el nombre a los 5 mejores pasadores
-top_pasadores = ranking_final_pases.sort_values(by='asistencias_por_pase', ascending=False).head(5)
+# 3. Añadimos el recuadro con los datos de la correlación en la esquina superior izquierda
+texto_stats = f"Correlación (r): {r:.2f}\nP-Valor: {p_valor:.3f}"
+plt.text(0.05, 0.95, texto_stats, transform=plt.gca().transAxes, 
+         fontsize=11, verticalalignment='top', 
+         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='lightgray'))
+
+# 4. Añadimos el nombre a los 5 mejores pasadores
+top_pasadores = ranking_incremento_pases.sort_values(by='asistencias_por_pase', ascending=False).head(5)
 for jugador, row in top_pasadores.iterrows():
     plt.text(row['asistencias_por_pase'] + 0.001, row['incremento_medio'], str(jugador), 
              fontsize=9, color='black', weight='bold')
 
 plt.tight_layout()
-plt.savefig('grafico_pases.png', dpi=300)
-plt.show()
-
-# Gráfico PASES - TODOS LOS JUGADORES
-
-plt.figure(figsize=(10, 6))
-
-# Usamos 'ranking_pasadores' que contiene a todos sin filtros
-sns.regplot(data=ranking_pasadores, x='asistencias_por_pase', y='incremento_medio', 
-            color='mediumseagreen', 
-            scatter_kws={'s': 80, 'alpha': 0.6}, 
-            line_kws={'color': 'darkred', 'linewidth': 2}) 
-
-plt.title('Pases: Asistencias por Pase vs Incremento Medio (Todos)', fontsize=14, fontweight='bold')
-plt.xlabel('Efectividad (Asistencias por Pase)', fontsize=12)
-plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
-
-# Añadimos el nombre a los 5 mejores pasadores
-top_pasadores = ranking_pasadores.sort_values(by='asistencias_por_pase', ascending=False).head(5)
-for jugador, row in top_pasadores.iterrows():
-    plt.text(row['asistencias_por_pase'] + 0.001, row['incremento_medio'], str(jugador), 
-             fontsize=9, color='black', weight='bold')
-
-plt.tight_layout()
-plt.savefig('grafico_pases_todos.png', dpi=300)
+plt.savefig('../img/grafico_pases.png', dpi=300)
 plt.show()
 ```
+
+
+Aunque parece haber una suave relación positiva, es demasiado baja con un p-valor demasiado alto. Tampoco hay correlación entre dar más asistencias y tener mejor índice de decisión.
+
+## Hipótesis 1. ¿ Los goles tenían siempre un incremento = 0 o positivo?
+
+Vamos a comparar la distribución del incremento de probabilidad en 2 grupos separados. Los tiros que fueron gol y los que no. Vamos a ver si en los goles, era muy claro o había incluso opciones mejores.  
+
+```{python}
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+inc_goles = df_shots[df_shots['gol'] == 1]['incremento']
+inc_fallos = df_shots[df_shots['gol'] == 0]['incremento']
+
+# Visualizar las distribuciones
+plt.figure(figsize=(10, 6))
+sns.kdeplot(inc_goles, label='Gol (1)', fill=True, color='green')
+sns.kdeplot(inc_fallos, label='No Gol (0)', fill=True, color='red')
+plt.axvline(0, color='black', linestyle='--', alpha=0.5) # Línea en el 0 (decisión neutra)
+plt.title('Distribución del Incremento de Calidad: Gol vs No Gol')
+plt.xlabel('Incremento (Calidad Pase - Calidad Tiro)')
+plt.legend()
+plt.show()
+```
+
+```{python}
+from scipy import stats
+
+# Test no paramétrico para comparar las dos distribuciones
+stat, p_valor = stats.mannwhitneyu(inc_goles, inc_fallos, alternative='two-sided')
+
+print(f"P-Valor: {p_valor:.4f}")
+print(f"Media Incremento (Gol): {inc_goles.mean():.4f}")
+print(f"Media Incremento (No Gol): {inc_fallos.mean():.4f}")
+```
+
+Existe evidencia significativa para determinar que, en los tiros que fueron gol, se estaba tomando, como mínimo, una de las mejores decisiones. 
+
+Respecto a los tiros que no acabaron en gol, se observa que en media, habían opciones mejores que aumentaban la probabilidad un 5%.
+
+## Hipótesis 2. ¿Boniface y Wirtz registran mejores datos sobre incremento de la calidad de la ocasión?
+
+Respecto a esta segunda hipótesis, ya ha sido validada al revisar los datos sobre los mejores tiradores. No.

@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.37">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>3&nbsp; Metodología – Análisis de Tiros en la Bundesliga 2023/24</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../notebooks/03_resultados.html" rel="next">
+<link href="../notebooks/01_data_preprocessing.html" rel="prev">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-7f8f88aac4f3542376d5c11b86a4c14d.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-631496449bf32ff9b0bb69a6bfd9195d.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../style.css">
+</head>
+
+<body class="nav-sidebar floating quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../notebooks/02_metodologia.html"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Metodología</span></a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+    <div class="sidebar-title mb-0 py-0">
+      <a href="../">Análisis de Tiros en la Bundesliga 2023/24</a> 
+        <div class="sidebar-tools-main">
+    <a href="../Análisis-de-Tiros-en-la-Bundesliga-2023-24.pdf" title="Download PDF" class="quarto-navigation-tool px-1" aria-label="Download PDF"><i class="bi bi-file-pdf"></i></a>
+</div>
+    </div>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">1</span>&nbsp; <span class="chapter-title">Introducción</span></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/01_data_preprocessing.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Preprocesamiento de los datos</span></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/02_metodologia.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Metodología</span></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/03_resultados.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Resultados</span></span></a>
+  </div>
+</li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Índice de contenidos</h2>
+   
+  <ul>
+  <li><a href="#configuración-del-entorno-y-carga-de-datos." id="toc-configuración-del-entorno-y-carga-de-datos." class="nav-link active" data-scroll-target="#configuración-del-entorno-y-carga-de-datos."><span class="header-section-number">3.1</span> Configuración del entorno y carga de datos.</a></li>
+  <li><a href="#definición-del-campo-y-constantes-geométricas." id="toc-definición-del-campo-y-constantes-geométricas." class="nav-link" data-scroll-target="#definición-del-campo-y-constantes-geométricas."><span class="header-section-number">3.2</span> Definición del campo y constantes geométricas.</a></li>
+  <li><a href="#creación-de-variables-derivadas-del-360." id="toc-creación-de-variables-derivadas-del-360." class="nav-link" data-scroll-target="#creación-de-variables-derivadas-del-360."><span class="header-section-number">3.3</span> Creación de variables derivadas del 360.</a>
+  <ul class="collapse">
+  <li><a href="#distancia-al-centro-de-la-portería" id="toc-distancia-al-centro-de-la-portería" class="nav-link" data-scroll-target="#distancia-al-centro-de-la-portería"><span class="header-section-number">3.3.1</span> Distancia al centro de la portería</a></li>
+  <li><a href="#ángulo-del-balón-respecto-a-los-palos" id="toc-ángulo-del-balón-respecto-a-los-palos" class="nav-link" data-scroll-target="#ángulo-del-balón-respecto-a-los-palos"><span class="header-section-number">3.3.2</span> Ángulo del balón respecto a los palos</a></li>
+  <li><a href="#número-de-jugadores-dentro-del-cono-de-visión" id="toc-número-de-jugadores-dentro-del-cono-de-visión" class="nav-link" data-scroll-target="#número-de-jugadores-dentro-del-cono-de-visión"><span class="header-section-number">3.3.3</span> Número de jugadores dentro del cono de visión</a></li>
+  <li><a href="#distancia-al-rival-más-cercano-dentro-del-ángulo-de-tiro" id="toc-distancia-al-rival-más-cercano-dentro-del-ángulo-de-tiro" class="nav-link" data-scroll-target="#distancia-al-rival-más-cercano-dentro-del-ángulo-de-tiro"><span class="header-section-number">3.3.4</span> Distancia al rival más cercano dentro del ángulo de tiro</a></li>
+  </ul></li>
+  <li><a href="#fórmula-cálculo-de-la-probabilidad-de-meter-gol." id="toc-fórmula-cálculo-de-la-probabilidad-de-meter-gol." class="nav-link" data-scroll-target="#fórmula-cálculo-de-la-probabilidad-de-meter-gol."><span class="header-section-number">3.4</span> Fórmula: Cálculo de la probabilidad de meter gol.</a></li>
+  <li><a href="#cálculo-del-incremento-en-la-probabilidad-de-gol-respecto-a-compañeros-libres." id="toc-cálculo-del-incremento-en-la-probabilidad-de-gol-respecto-a-compañeros-libres." class="nav-link" data-scroll-target="#cálculo-del-incremento-en-la-probabilidad-de-gol-respecto-a-compañeros-libres."><span class="header-section-number">3.5</span> Cálculo del incremento en la probabilidad de gol respecto a compañeros libres.</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Metodología</span></h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>En este capítulo, el objetivo reside en el cálculo de métricas sobre el contexto de los tiros basados en la posición de disparo y el contexto de la jugada a través del 360. A través de estas métricas, se define un sencillo modelo en el que se optimizan sus parámetros con el objetivo de ser lo más parecido posible a un modelo de xG.</p>
+<p>Una vez tenemos nuestro propio modelo de xG, podremos calcular, para cualquier posición del campo y contexto de jugadores, la probabilidad de meter gol. Con esta característica, seremos capaces de calcular, para cada tiro, si hacer un pase a otro compañero era mejor opción en términos de mejora de la probabilidad de gol en nuestro modelo. Se trabajará de forma análoga para los pases previos a un tiro. Se calculará la probabilidad de gol desde el punto donde llegó el pase, y se comparará con la probabilidad si se hubiera pasado a cualquier otro compañero.</p>
+<section id="configuración-del-entorno-y-carga-de-datos." class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="configuración-del-entorno-y-carga-de-datos."><span class="header-section-number">3.1</span> Configuración del entorno y carga de datos.</h2>
+<p>El primer paso para establecer nuestro motor de cálculo es inicializar el entorno de trabajo. Para ello, importamos las librerías fundamentales para la manipulación estructurada de datos y la ejecución de operaciones vectoriales optimizadas. Asimismo, incluimos los módulos matemáticos estándar que nos permitirán aplicar cálculos trigonométricos sobre el plano bidimensional del terreno de juego.</p>
+<p>Una vez configurado el entorno, ingerimos los conjuntos de datos en formato optimizado (.parquet) que consolidamos durante la ingesta previa, garantizando que disponemos de la muestra exacta de acciones dinámicas en “Open Play” acompañadas de su contexto espacial (Freeze Frames).</p>
+<div id="20b03c36" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> math</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ast</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> seaborn <span class="im">as</span> sns</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.metrics <span class="im">import</span> r2_score</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>PATH_PROCESSED <span class="op">=</span> Path(<span class="st">"../data/processed"</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>df_shots <span class="op">=</span> pd.read_parquet(PATH_PROCESSED <span class="op">/</span> <span class="st">"shots_360_analysis.parquet"</span>)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>df_passes <span class="op">=</span> pd.read_parquet(PATH_PROCESSED <span class="op">/</span> <span class="st">"shots_pass_360_analysis.parquet"</span>)</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> parse_spatial_data(val):</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co">    Convierte representaciones en string de listas y diccionarios </span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="co">    a sus tipos nativos de Python de forma segura.</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> pd.isna(val):</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> val</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">isinstance</span>(val, <span class="bu">str</span>):</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        <span class="cf">try</span>:</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> ast.literal_eval(val)</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>        <span class="cf">except</span> (<span class="pp">ValueError</span>, <span class="pp">SyntaxError</span>):</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> val</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> val</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>espaciales_shots <span class="op">=</span> [</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>    <span class="st">'location'</span>, <span class="st">'shot_end_location'</span>, </span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    <span class="st">'visible_area'</span>, <span class="st">'freeze_frame'</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> col <span class="kw">in</span> espaciales_shots:</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> col <span class="kw">in</span> df_shots.columns:</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        df_shots[col] <span class="op">=</span> df_shots[col].<span class="bu">apply</span>(parse_spatial_data)</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>espaciales_secuencias <span class="op">=</span> [</span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    <span class="st">'location_pass'</span>, <span class="st">'pass_end_location_pass'</span>, </span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="st">'visible_area_360_pass'</span>, <span class="st">'freeze_frame_360_pass'</span>,</span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>    <span class="st">'location_shot'</span>, <span class="st">'shot_end_location_shot'</span>, </span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>    <span class="st">'visible_area_360_shot'</span>, <span class="st">'freeze_frame_360_shot'</span></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> col <span class="kw">in</span> espaciales_secuencias:</span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> col <span class="kw">in</span> df_passes.columns:</span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>        df_passes[col] <span class="op">=</span> df_passes[col].<span class="bu">apply</span>(parse_spatial_data)</span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> col, espaciales_secuencias, espaciales_shots, PATH_PROCESSED, parse_spatial_data</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="definición-del-campo-y-constantes-geométricas." class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="definición-del-campo-y-constantes-geométricas."><span class="header-section-number">3.2</span> Definición del campo y constantes geométricas.</h2>
+<p>Para realizar el modelado matemático de las trayectorias de los disparos y los pases, es fundamental anclar nuestro sistema sobre las coordenadas estándar proporcionadas por la especificación oficial de StatsBomb.El terreno de juego se define en un plano bidimensional continuo cuyas dimensiones abarcan desde 0 hasta 120 metros en el eje X (longitud) y desde 0 hasta 80 metros en el eje Y (anchura). De acuerdo con la estructuración geométrica del dato espacial, los eventos siempre se orientan asumiendo que el equipo atacante progresa del valor mínimo al valor máximo del eje X. Por consiguiente, nuestro objetivo a batir siempre se situará sobre la línea de fondo <span class="math inline">\(x = 120\)</span>.</p>
+<p>Con base en la ubicación de los postes, abstraeremos los elementos clave del campo utilizando la siguiente formalización matemática:</p>
+<ul>
+<li>Poste izquierdo: <span class="math inline">\(P_{izq} = (120, 36)\)</span></li>
+<li>Poste derecho: <span class="math inline">\(P_{der} = (120, 44)\)</span></li>
+<li>Centro de la portería: Obtenido mediante el punto medio de los postes, estableciendo <span class="math inline">\(P_{cen} = (120, 40)\)</span>.- Volumen de oclusión (<span class="math inline">\(r\)</span>): Para proyectar la oclusión espacial, modelaremos la silueta física de cada jugador dentro del Freeze Frame como un cuerpo circular con un radio <span class="math inline">\(r = 0.5\)</span> metros.</li>
+</ul>
+<p>A continuación, inicializamos estas coordenadas y métricas de contorno como variables constantes (en mayúsculas por convención) para su consumo posterior en los algoritmos de probabilidad.</p>
+<div id="2f3bc8e8" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>PITCH_LENGTH <span class="op">=</span> <span class="fl">120.0</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>PITCH_WIDTH <span class="op">=</span> <span class="fl">80.0</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>GOAL_POST_LEFT <span class="op">=</span> (<span class="fl">120.0</span>, <span class="fl">36.0</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>GOAL_POST_RIGHT <span class="op">=</span> (<span class="fl">120.0</span>, <span class="fl">44.0</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>GOAL_CENTER <span class="op">=</span> (<span class="fl">120.0</span>, <span class="fl">40.0</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>PLAYER_RADIUS <span class="op">=</span> <span class="fl">0.5</span> </span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="creación-de-variables-derivadas-del-360." class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="creación-de-variables-derivadas-del-360."><span class="header-section-number">3.3</span> Creación de variables derivadas del 360.</h2>
+<p>Una vez creadas las variables de referencia del terreno de juego, el siguiente paso de la metodología consiste en la creación de métricas tácticas explicativas sobre la posición de disparo. Aprovechando la posición desde la que se golpea y el contexto 360 de ese momento, vamos a extraer cuatro métricas para cada posible disparo desde una posición determinada del campo.</p>
+<section id="distancia-al-centro-de-la-portería" class="level3" data-number="3.3.1">
+<h3 data-number="3.3.1" class="anchored" data-anchor-id="distancia-al-centro-de-la-portería"><span class="header-section-number">3.3.1</span> Distancia al centro de la portería</h3>
+<p>La distancia al objetivo es, históricamente, la variable de mayor peso en cualquier modelo de probabilidad de éxito. Utilizando el vector location del evento principal, calcularemos la distancia euclidiana exacta entre el origen del disparo (o pase) y nuestra constante central de la portería <span class="math inline">\(P_{cen} = (120, 40)\)</span>. Para un punto de origen <span class="math inline">\((x, y)\)</span>, la distancia <span class="math inline">\(d\)</span> se define como:<br>
+<span class="math display">\[d = \sqrt{(120 - x)^2 + (40 - y)^2}\]</span></p>
+<p>Implementaremos este cálculo mediante una función modular en Python diseñada para recibir un array genérico de dos posiciones [x, y]. Este enfoque arquitectónico nos permite aplicar el cálculo geométrico tanto sobre la ubicación central del evento, como reutilizar la misma función de manera iterativa sobre las coordenadas individuales de cada jugador presente en los objetos anidados del freeze_frame. De este modo, garantizamos la consistencia matemática a lo largo de todo el análisis espacial.</p>
+<div id="6b10aa29" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> calcular_distancia_porteria(punto_origen, punto_destino<span class="op">=</span>GOAL_CENTER):</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Calcula la distancia euclidiana desde una coordenada [x, y] </span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">    hasta un punto objetivo (por defecto, el centro de la portería).</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co">    Parámetros:</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co">    - punto_origen: lista o tupla [x, y] con la ubicación a evaluar.</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co">    - punto_destino: tupla (X, Y) con las coordenadas del objetivo.</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co">    Retorna:</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co">    - Distancia en metros (float) o NaN si el punto no es válido.</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Verificamos que el input sea válido y tenga al menos X e Y</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(punto_origen, (<span class="bu">list</span>, <span class="bu">tuple</span>)) <span class="kw">or</span> <span class="bu">len</span>(punto_origen) <span class="op">&lt;</span> <span class="dv">2</span>:</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> np.nan</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    x, y <span class="op">=</span> punto_origen[<span class="dv">0</span>], punto_origen[<span class="dv">1</span>]</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    gx, gy <span class="op">=</span> punto_destino</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Cálculo euclidiano puro</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    distancia <span class="op">=</span> math.sqrt((gx <span class="op">-</span> x)<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> (gy <span class="op">-</span> y)<span class="op">**</span><span class="dv">2</span>)</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> distancia</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="co"># Aplicamos la función sobre nuestra variable 'location' del DataFrame de tiros</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>df_shots[<span class="st">'dist_centro_porteria'</span>] <span class="op">=</span> df_shots[<span class="st">'location'</span>].<span class="bu">apply</span>(calcular_distancia_porteria)</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>df_passes[<span class="st">'dist_centro_porteria'</span>] <span class="op">=</span> df_passes[<span class="st">'pass_end_location_pass'</span>].<span class="bu">apply</span>(calcular_distancia_porteria)</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df_shots[[<span class="st">'player_name'</span>, <span class="st">'location'</span>, <span class="st">'dist_centro_porteria'</span>]].head(<span class="dv">5</span>).to_markdown(index<span class="op">=</span><span class="va">False</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>| player_name       | location      |   dist_centro_porteria |
+|:------------------|:--------------|-----------------------:|
+| Granit Xhaka      | [92.2, 27.1]  |                30.6472 |
+| Timo Werner       | [107.0, 23.2] |                21.2424 |
+| Jonas Hofmann     | [96.2, 44.8]  |                24.2792 |
+| Ikoma Loïs Openda | [101.0, 28.8] |                22.0554 |
+| Benjamin Henrichs | [98.1, 29.8]  |                24.1588 |</code></pre>
+</div>
+</div>
+</section>
+<section id="ángulo-del-balón-respecto-a-los-palos" class="level3" data-number="3.3.2">
+<h3 data-number="3.3.2" class="anchored" data-anchor-id="ángulo-del-balón-respecto-a-los-palos"><span class="header-section-number">3.3.2</span> Ángulo del balón respecto a los palos</h3>
+<p>El ángulo de tiro, o shooting angle, define la amplitud de la “ventana” de gol que el rematador percibe en el momento del impacto. Matemáticamente, este se define como el ángulo formado por dos vectores que parten desde la ubicación del balón <span class="math inline">\((x, y)\)</span> hacia los dos postes de la portería, situados en las coordenadas <span class="math inline">\(P_{izq} = (120, 36)\)</span> y <span class="math inline">\(P_{der} = (120, 44)\)</span>.</p>
+<p>Una mayor amplitud angular implica una mayor superficie de portería visible y, por tanto, una mayor probabilidad técnica de éxito. Para su cálculo, implementaremos una función que utilice el producto escalar de los vectores directores, obteniendo el ángulo <span class="math inline">\(\theta\)</span> mediante la siguiente relación: <span class="math display">\[\cos(\theta) = \frac{\vec{V_1} \cdot \vec{V_2}}{|\vec{V_1}| \cdot |\vec{V_2}|}\]</span></p>
+<p>Donde <span class="math inline">\(\vec{V_1}\)</span> y <span class="math inline">\(\vec{V_2}\)</span> son los vectores desde el balón a los postes izquierdo y derecho, respectivamente.</p>
+<div id="54c7002c" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> calcular_angulo_tiro(location):</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Calcula el ángulo de tiro disponible en grados.</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co">    Parámetros:</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co">    - location: array [x, y] con la posición del jugador/balón.</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="co">    Retorna:</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co">    - Ángulo en grados (float).</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(location, (<span class="bu">list</span>, <span class="bu">tuple</span>, np.ndarray)) <span class="kw">or</span> <span class="bu">len</span>(location) <span class="op">&lt;</span> <span class="dv">2</span>:</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> np.nan</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>    x, y <span class="op">=</span> location[<span class="dv">0</span>], location[<span class="dv">1</span>]</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Definir vectores desde el balón a los palos</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    v1 <span class="op">=</span> np.array([GOAL_POST_LEFT[<span class="dv">0</span>] <span class="op">-</span> x, GOAL_POST_LEFT[<span class="dv">1</span>] <span class="op">-</span> y])</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    v2 <span class="op">=</span> np.array([GOAL_POST_RIGHT[<span class="dv">0</span>] <span class="op">-</span> x, GOAL_POST_RIGHT[<span class="dv">1</span>] <span class="op">-</span> y])</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Calcular el producto escalar y las magnitudes</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>    dot_product <span class="op">=</span> np.dot(v1, v2)</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    norm_v1 <span class="op">=</span> np.linalg.norm(v1)</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    norm_v2 <span class="op">=</span> np.linalg.norm(v2)</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Calcular coseno del ángulo y asegurar rango [-1, 1] para arccos</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    cos_theta <span class="op">=</span> np.clip(dot_product <span class="op">/</span> (norm_v1 <span class="op">*</span> norm_v2), <span class="op">-</span><span class="fl">1.0</span>, <span class="fl">1.0</span>)</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Obtener ángulo en radianes y convertir a grados</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    angle_rad <span class="op">=</span> np.arccos(cos_theta)</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.degrees(angle_rad)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a><span class="co"># Aplicación sobre nuestro dataset</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>df_shots[<span class="st">'angulo_tiro'</span>] <span class="op">=</span> df_shots[<span class="st">'location'</span>].<span class="bu">apply</span>(calcular_angulo_tiro)</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>df_passes[<span class="st">'angulo_tiro'</span>] <span class="op">=</span> df_passes[<span class="st">'pass_end_location_pass'</span>].<span class="bu">apply</span>(calcular_angulo_tiro)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df_shots[[<span class="st">'player_name'</span>, <span class="st">'location'</span>, <span class="st">'dist_centro_porteria'</span>, <span class="st">'angulo_tiro'</span>]].head(<span class="dv">4</span>).to_markdown(index<span class="op">=</span><span class="va">False</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>| player_name       | location      |   dist_centro_porteria |   angulo_tiro |
+|:------------------|:--------------|-----------------------:|--------------:|
+| Granit Xhaka      | [92.2, 27.1]  |                30.6472 |       13.5438 |
+| Timo Werner       | [107.0, 23.2] |                21.2424 |       13.4388 |
+| Jonas Hofmann     | [96.2, 44.8]  |                24.2792 |       18.3666 |
+| Ikoma Loïs Openda | [101.0, 28.8] |                22.0554 |       17.9057 |</code></pre>
+</div>
+</div>
+</section>
+<section id="número-de-jugadores-dentro-del-cono-de-visión" class="level3" data-number="3.3.3">
+<h3 data-number="3.3.3" class="anchored" data-anchor-id="número-de-jugadores-dentro-del-cono-de-visión"><span class="header-section-number">3.3.3</span> Número de jugadores dentro del cono de visión</h3>
+<p>Para determinar si un jugador rival está bloqueando físicamente el ángulo de tiro, debemos modelar el “cono” como un triángulo cuyos vértices son: la posición del balón en posesión (<span class="math inline">\(S\)</span>) y los dos postes de la portería, <span class="math inline">\(P_{izq} = (120, 36)\)</span> y <span class="math inline">\(P_{der} = (120, 44)\)</span>.</p>
+<p>Un punto <span class="math inline">\(P\)</span> (la posición de un rival) se encuentra dentro de este triángulo si cumple simultáneamente las condiciones de orientación respecto a los vectores que definen sus lados. La forma más robusta y eficiente de calcular esto en programación es mediante el producto vectorial en 2D. Para cada vector de lado del triángulo <span class="math inline">\(\vec{AB}\)</span> y el punto <span class="math inline">\(P\)</span>, el signo del producto vectorial <span class="math inline">\((B_x - A_x)(P_y - A_y) - (B_y - A_y)(P_x - A_x)\)</span> nos indica si el punto está a la izquierda o a la derecha de la línea <span class="math inline">\(AB\)</span>. Si al realizar esta operación para los tres lados del triángulo (<span class="math inline">\(SP_{izq}\)</span>, <span class="math inline">\(P_{izq}P_{der}\)</span>, y <span class="math inline">\(P_{der}S\)</span>) los signos son consistentes (todos positivos o todos negativos), el punto <span class="math inline">\(P\)</span> está contenido dentro del área de visión.A continuación, implementamos la función que procesa el array de diccionarios freeze_frame (que contiene la información de los jugadores en ese instante) para filtrar y contar a los rivales que cumplan esta condición.</p>
+<div id="b412aadb" class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> calcular_jugadores_en_cono(shooter_location, freeze_frame):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Calcula el número de compañeros, rivales y total de jugadores</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co">    dentro del cono de visión del lanzador.</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Manejo de casos nulos o vacíos</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(freeze_frame, <span class="bu">list</span>) <span class="kw">or</span> <span class="kw">not</span> <span class="bu">isinstance</span>(shooter_location, (<span class="bu">list</span>, np.ndarray)):</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Definimos los vértices del triángulo (Postes y tirador)</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    S <span class="op">=</span> np.array(shooter_location)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    PL <span class="op">=</span> np.array(GOAL_POST_LEFT)</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    PR <span class="op">=</span> np.array(GOAL_POST_RIGHT)</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> es_punto_en_triangulo(p, s, pl, pr):</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>        <span class="kw">def</span> cross_product(o, a, b):</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>            <span class="cf">return</span> (a[<span class="dv">0</span>] <span class="op">-</span> o[<span class="dv">0</span>]) <span class="op">*</span> (b[<span class="dv">1</span>] <span class="op">-</span> o[<span class="dv">1</span>]) <span class="op">-</span> (a[<span class="dv">1</span>] <span class="op">-</span> o[<span class="dv">1</span>]) <span class="op">*</span> (b[<span class="dv">0</span>] <span class="op">-</span> o[<span class="dv">0</span>])</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        d1 <span class="op">=</span> cross_product(s, pl, p)</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        d2 <span class="op">=</span> cross_product(pl, pr, p)</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        d3 <span class="op">=</span> cross_product(pr, s, p)</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>        has_neg <span class="op">=</span> (d1 <span class="op">&lt;</span> <span class="dv">0</span>) <span class="kw">or</span> (d2 <span class="op">&lt;</span> <span class="dv">0</span>) <span class="kw">or</span> (d3 <span class="op">&lt;</span> <span class="dv">0</span>)</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>        has_pos <span class="op">=</span> (d1 <span class="op">&gt;</span> <span class="dv">0</span>) <span class="kw">or</span> (d2 <span class="op">&gt;</span> <span class="dv">0</span>) <span class="kw">or</span> (d3 <span class="op">&gt;</span> <span class="dv">0</span>)</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="kw">not</span> (has_neg <span class="kw">and</span> has_pos)</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>    cont_teammates <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>    cont_opponents <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> player <span class="kw">in</span> freeze_frame:</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Verificamos si el jugador está dentro del área</span></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span> np.array(player[<span class="st">'location'</span>])</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> es_punto_en_triangulo(p, S, PL, PR):</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Según la especificación 360, 'teammate' es booleano</span></span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> player.get(<span class="st">'teammate'</span>, <span class="va">True</span>):</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>                cont_teammates <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>            <span class="cf">else</span>:</span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>                cont_opponents <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>    total <span class="op">=</span> cont_teammates <span class="op">+</span> cont_opponents</span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> cont_teammates, cont_opponents, total</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a><span class="co"># Aplicamos la función y expandimos en 3 nuevas columnas</span></span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a><span class="co"># result_type='expand' permite convertir la tupla de retorno en 3 columnas nuevas</span></span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a>df_shots[[<span class="st">'compañeros_en_cono'</span>, <span class="st">'rivales_en_cono'</span>, <span class="st">'jugadores_en_cono'</span>]] <span class="op">=</span> df_shots.<span class="bu">apply</span>(</span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_jugadores_en_cono(row[<span class="st">'location'</span>], row[<span class="st">'freeze_frame'</span>]), </span>
+<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a>    axis<span class="op">=</span><span class="dv">1</span>, </span>
+<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a>    result_type<span class="op">=</span><span class="st">'expand'</span></span>
+<span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a>df_passes[[<span class="st">'compañeros_en_cono'</span>, <span class="st">'rivales_en_cono'</span>, <span class="st">'jugadores_en_cono'</span>]] <span class="op">=</span> df_passes.<span class="bu">apply</span>(</span>
+<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_jugadores_en_cono(row[<span class="st">'pass_end_location_pass'</span>], row[<span class="st">'freeze_frame_360_pass'</span>]), </span>
+<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a>    axis<span class="op">=</span><span class="dv">1</span>, </span>
+<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a>    result_type<span class="op">=</span><span class="st">'expand'</span></span>
+<span id="cb7-56"><a href="#cb7-56" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb7-57"><a href="#cb7-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-58"><a href="#cb7-58" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df_shots[[<span class="st">'player_name'</span>, <span class="st">'compañeros_en_cono'</span>, <span class="st">'rivales_en_cono'</span>, <span class="st">'jugadores_en_cono'</span>]].head(<span class="dv">4</span>).to_markdown(index<span class="op">=</span><span class="va">False</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>| player_name       |   compañeros_en_cono |   rivales_en_cono |   jugadores_en_cono |
+|:------------------|---------------------:|------------------:|--------------------:|
+| Granit Xhaka      |                    0 |                 1 |                   1 |
+| Timo Werner       |                    0 |                 1 |                   1 |
+| Jonas Hofmann     |                    0 |                 3 |                   3 |
+| Ikoma Loïs Openda |                    0 |                 2 |                   2 |</code></pre>
+</div>
+</div>
+</section>
+<section id="distancia-al-rival-más-cercano-dentro-del-ángulo-de-tiro" class="level3" data-number="3.3.4">
+<h3 data-number="3.3.4" class="anchored" data-anchor-id="distancia-al-rival-más-cercano-dentro-del-ángulo-de-tiro"><span class="header-section-number">3.3.4</span> Distancia al rival más cercano dentro del ángulo de tiro</h3>
+<p>Una vez que hemos filtrado los jugadores que ocupan el cono de visión del lanzador, calcularemos la intensidad de la presión defensiva. Para ello, buscamos el valor mínimo de las distancias euclidianas entre la posición del lanzador <span class="math inline">\(S = (x_s, y_s)\)</span> y la posición de cada jugador rival <span class="math inline">\(R_i = (x_i, y_i)\)</span> que se encuentre dentro del cono, según la siguiente expresión: <span class="math display">\[d_{min} = \min_{i \in \text{cono}} \sqrt{(x_i - x_s)^2 + (y_i - y_s)^2}\]</span></p>
+<p>Si el conjunto de jugadores en el cono está vacío, asignaremos un valor suficientemente alto: 60.0</p>
+<div id="d75f5505" class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> calcular_distancia_rival_cercano_cono(shooter_location, freeze_frame):</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co">    Calcula la distancia al rival más cercano que se encuentre </span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co">    dentro del cono de visión.</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(freeze_frame, <span class="bu">list</span>) <span class="kw">or</span> <span class="kw">not</span> <span class="bu">isinstance</span>(shooter_location, (<span class="bu">list</span>, np.ndarray)):</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">60.0</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> cross_product(o, a, b):</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> (a[<span class="dv">0</span>] <span class="op">-</span> o[<span class="dv">0</span>]) <span class="op">*</span> (b[<span class="dv">1</span>] <span class="op">-</span> o[<span class="dv">1</span>]) <span class="op">-</span> (a[<span class="dv">1</span>] <span class="op">-</span> o[<span class="dv">1</span>]) <span class="op">*</span> (b[<span class="dv">0</span>] <span class="op">-</span> o[<span class="dv">0</span>])</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    shooter_loc <span class="op">=</span> np.array(shooter_location)</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>    distancias_en_cono <span class="op">=</span> []</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> player <span class="kw">in</span> freeze_frame:</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Solo rivales (teammate = False)</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="kw">not</span> player.get(<span class="st">'teammate'</span>, <span class="va">True</span>):</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>            player_loc <span class="op">=</span> np.array(player[<span class="st">'location'</span>])</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Verificamos si está en el cono (reutilizamos lógica)</span></span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>            cp1 <span class="op">=</span> cross_product(shooter_loc, GOAL_POST_LEFT, player_loc)</span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>            cp2 <span class="op">=</span> cross_product(shooter_loc, player_loc, GOAL_POST_RIGHT)</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> cp1 <span class="op">&gt;</span> <span class="dv">0</span> <span class="kw">and</span> cp2 <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Calculamos distancia euclidiana</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>                dist <span class="op">=</span> np.linalg.norm(player_loc <span class="op">-</span> shooter_loc)</span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>                distancias_en_cono.append(dist)</span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> distancias_en_cono:</span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="fl">60.0</span> <span class="co"># O 99.0 si prefieres un valor fijo para el modelo</span></span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">min</span>(distancias_en_cono)</span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a><span class="co"># Implementación sobre el dataframe</span></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>df_shots[<span class="st">'dist_rival_cercano_cono'</span>] <span class="op">=</span> df_shots.<span class="bu">apply</span>(</span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_distancia_rival_cercano_cono(row[<span class="st">'location'</span>], row[<span class="st">'freeze_frame'</span>]), axis<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a>df_passes[<span class="st">'dist_rival_cercano_cono'</span>] <span class="op">=</span> df_passes.<span class="bu">apply</span>(</span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_distancia_rival_cercano_cono(row[<span class="st">'pass_end_location_pass'</span>], row[<span class="st">'freeze_frame_360_pass'</span>]), </span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>    axis<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df_shots[[<span class="st">'player_name'</span>, <span class="st">'jugadores_en_cono'</span>, <span class="st">'dist_rival_cercano_cono'</span>]].head(<span class="dv">4</span>).to_markdown())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>|    | player_name       |   jugadores_en_cono |   dist_rival_cercano_cono |
+|---:|:------------------|--------------------:|--------------------------:|
+|  0 | Granit Xhaka      |                   1 |                  11.353   |
+|  1 | Timo Werner       |                   1 |                  17.2666  |
+|  2 | Jonas Hofmann     |                   3 |                   6.59317 |
+|  3 | Ikoma Loïs Openda |                   2 |                   1.35084 |</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="fórmula-cálculo-de-la-probabilidad-de-meter-gol." class="level2" data-number="3.4">
+<h2 data-number="3.4" class="anchored" data-anchor-id="fórmula-cálculo-de-la-probabilidad-de-meter-gol."><span class="header-section-number">3.4</span> Fórmula: Cálculo de la probabilidad de meter gol.</h2>
+<p>Antes de realizar la fórmula para estimar la probabilidad de meter gol según el contexto y distancia del lanzador a portería, vamos a revisar los rangos de valores de las 4 métricas numéricas recién calculadas.</p>
+<div id="da9de76c" class="cell" data-execution_count="7">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Lista de las métricas que acabamos de generar</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>metricas <span class="op">=</span> [</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">'dist_centro_porteria'</span>, </span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">'angulo_tiro'</span>, </span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">'jugadores_en_cono'</span>, </span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">'dist_rival_cercano_cono'</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculamos un resumen estadístico básico</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Usamos 'describe' para obtener min, max, media y percentiles</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>resumen_stats <span class="op">=</span> df_shots[metricas].describe().T[[<span class="st">'min'</span>, <span class="st">'max'</span>, <span class="st">'mean'</span>, <span class="st">'50%'</span>]]</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Añadimos un conteo de valores nulos, vital para saber si el 360 estaba vacío</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>resumen_stats[<span class="st">'null_count'</span>] <span class="op">=</span> df_shots[metricas].isnull().<span class="bu">sum</span>()</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Resumen estadístico de las nuevas métricas:"</span>)</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(resumen_stats.to_markdown())</span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a><span class="kw">del</span> resumen_stats</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Resumen estadístico de las nuevas métricas:
+|                         |      min |     max |    mean |      50% |   null_count |
+|:------------------------|---------:|--------:|--------:|---------:|-------------:|
+| dist_centro_porteria    | 3.32415  |  62.67  | 17.9219 | 17.3416  |            0 |
+| angulo_tiro             | 6.591    | 103.625 | 26.4734 | 21.2997  |            0 |
+| jugadores_en_cono       | 0        |   9     |  1.7669 |  1       |            0 |
+| dist_rival_cercano_cono | 0.384934 |  60     | 14.8851 |  9.02443 |            0 |</code></pre>
+</div>
+</div>
+<p>Observamos que hay valores de rival más cercano a 60, eso es debido a que, si no hay jugadores dentro del ángulo, ponemos esa distancia para evitar poner 0, lo que haría que el algoritmo detectara una presión muy fuerte sobre el jugador, algo irreal viendo las características de la situación</p>
+<p>Una vez asegurada la explicabilidad de cada métrica en los casos más extremos, creamos la fórmula base a utilizar:</p>
+<p><span class="math display">\[P(Gol) = \exp\left( - \lambda \cdot d_{porteria} - \alpha \cdot N_{cono} - \frac{1 - \alpha}{d_{rival}} \right)\]</span></p>
+<ul>
+<li>Distancia al centro de la portería (<span class="math inline">\(d_{porteria}\)</span>): Al estar en el exponente con signo negativo, a mayor distancia desde la ubicación del disparo hasta el centro de la portería <span class="math inline">\((120, 40)\)</span>, la probabilidad cae exponencialmente. Es el factor de “decaimiento” principal.</li>
+<li>Jugadores en el cono (<span class="math inline">\(N_{cono}\)</span>): Representa la oclusión física. A mayor número de jugadores identificados en el freeze_frame dentro del triángulo de tiro, mayor es el valor sustraído del exponente, lo que reduce la probabilidad de gol al aumentar la probabilidad de bloqueo.<br>
+</li>
+<li>Presión del rival más cercano (<span class="math inline">\(d_{rival}\)</span>): Actúa como un factor de urgencia técnica. Al ser una función inversa (<span class="math inline">\(\frac{1}{d_{rival}}\)</span>), cuanto menor sea la distancia al defensor (es decir, mayor presión), más grande es el término sustraído, lo que penaliza la probabilidad debido a la reducción del tiempo y espacio para una ejecución limpia.</li>
+</ul>
+<div id="4370cde3" class="cell" data-execution_count="8">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Definición de los parámetros como constantes por defecto para facilitar el ajuste</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>LAMBDA_DEFAULT <span class="op">=</span> <span class="fl">0.08</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>ALPHA_DEFAULT <span class="op">=</span> <span class="fl">0.6</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> calcular_probabilidad_gol(num_rivales, dist_presion, dist_porteria, </span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>                              lambda_metrica<span class="op">=</span>LAMBDA_DEFAULT, alpha<span class="op">=</span>ALPHA_DEFAULT):</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="co">    Calcula la probabilidad de gol basada en la distancia, oclusión y presión.</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="co">    </span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="co">    Parámetros ajustables:</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="co">    - lambda_metrica: Peso de la distancia a portería.</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="co">    - alpha: Peso de la densidad de defensores en el cono.</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Manejo de casos nulos o inválidos</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> pd.isna(dist_porteria) <span class="kw">or</span> dist_porteria <span class="op">&lt;=</span> <span class="dv">0</span>:</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> np.nan</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Manejo de la presión: Si la distancia es nula o menor a 0.1 (evitar div por cero), </span></span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>    <span class="co"># tratamos la presión como máxima (penalización alta)</span></span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> pd.isna(dist_presion) <span class="kw">or</span> dist_presion <span class="op">&lt;</span> <span class="fl">0.1</span>:</span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>        termino_presion <span class="op">=</span> (<span class="dv">1</span> <span class="op">-</span> alpha) <span class="op">/</span> <span class="fl">0.1</span> </span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>        termino_presion <span class="op">=</span> (<span class="dv">1</span> <span class="op">-</span> alpha) <span class="op">/</span> dist_presion</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Modelo exponencial: Probabilidad decae con el aumento de obstáculos</span></span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a>    <span class="co"># P = exp(-(lambda * d_porteria) - (alpha * N) - (presion))</span></span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Nota: El término de presión está normalizado respecto a ALPHA</span></span>
+<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a>    prob <span class="op">=</span> np.exp(</span>
+<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span>(lambda_metrica <span class="op">*</span> dist_porteria) </span>
+<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> (alpha <span class="op">*</span> num_rivales) </span>
+<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a>        <span class="op">-</span> (termino_presion)</span>
+<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">float</span>(np.clip(prob, <span class="fl">0.0</span>, <span class="fl">1.0</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>Una vez hemos definido la fórmula a utilizar, ahora nuestro objetivo es definir la mejor combinación de parámetros que consigan mejor rendimiento respecto al modelo base de xG</p>
+<div id="95456cb7" class="cell" data-execution_count="9">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.model_selection <span class="im">import</span> KFold</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> optimize_xg_params(df, lambdas, alphas):</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="co">    Optimiza los parámetros del modelo xG basado en la correlación con </span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="co">    el xG de StatsBomb utilizando 5-Fold Cross-Validation.</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 1. Definimos las variables de entrada necesarias</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="co"># (Asumimos que ya existen en tu df tras el preprocesamiento)</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    X <span class="op">=</span> df[[<span class="st">'dist_centro_porteria'</span>, <span class="st">'jugadores_en_cono'</span>, <span class="st">'dist_rival_cercano_cono'</span>, <span class="st">'shot_statsbomb_xg'</span>]]</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    kf <span class="op">=</span> KFold(n_splits<span class="op">=</span><span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>    best_corr <span class="op">=</span> <span class="op">-</span><span class="dv">1</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>    best_params <span class="op">=</span> (<span class="va">None</span>, <span class="va">None</span>)</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 2. Bucle de búsqueda en el espacio de parámetros</span></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> l <span class="kw">in</span> lambdas:</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> a <span class="kw">in</span> alphas:</span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>            fold_corrs <span class="op">=</span> []</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>            <span class="co"># 3. K-Fold Cross Validation</span></span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>            <span class="cf">for</span> train_idx, val_idx <span class="kw">in</span> kf.split(df):</span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>                val_data <span class="op">=</span> df.iloc[val_idx].copy()</span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Calculamos nuestra probabilidad con los parámetros actuales</span></span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Usando tu lógica de cálculo de presión y probabilidad</span></span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>                <span class="co"># (Asegúrate de que 'calcular_probabilidad_gol' esté definida en tu scope)</span></span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>                val_data[<span class="st">'prob_model'</span>] <span class="op">=</span> val_data.<span class="bu">apply</span>(</span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a>                    <span class="kw">lambda</span> row: calcular_probabilidad_gol(</span>
+<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a>                        row[<span class="st">'jugadores_en_cono'</span>], </span>
+<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a>                        row[<span class="st">'dist_rival_cercano_cono'</span>], </span>
+<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a>                        row[<span class="st">'dist_centro_porteria'</span>], </span>
+<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a>                        lambda_metrica<span class="op">=</span>l, </span>
+<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a>                        alpha<span class="op">=</span>a</span>
+<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a>                    ), axis<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a>                )</span>
+<span id="cb14-39"><a href="#cb14-39" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb14-40"><a href="#cb14-40" aria-hidden="true" tabindex="-1"></a>                <span class="co"># Correlación de Pearson en este fold</span></span>
+<span id="cb14-41"><a href="#cb14-41" aria-hidden="true" tabindex="-1"></a>                corr <span class="op">=</span> val_data[<span class="st">'prob_model'</span>].corr(val_data[<span class="st">'shot_statsbomb_xg'</span>])</span>
+<span id="cb14-42"><a href="#cb14-42" aria-hidden="true" tabindex="-1"></a>                fold_corrs.append(corr)</span>
+<span id="cb14-43"><a href="#cb14-43" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb14-44"><a href="#cb14-44" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Promediamos correlación de los 5 folds</span></span>
+<span id="cb14-45"><a href="#cb14-45" aria-hidden="true" tabindex="-1"></a>            avg_corr <span class="op">=</span> np.mean([c <span class="cf">for</span> c <span class="kw">in</span> fold_corrs <span class="cf">if</span> <span class="kw">not</span> np.isnan(c)])</span>
+<span id="cb14-46"><a href="#cb14-46" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb14-47"><a href="#cb14-47" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Guardamos el mejor</span></span>
+<span id="cb14-48"><a href="#cb14-48" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> avg_corr <span class="op">&gt;</span> best_corr:</span>
+<span id="cb14-49"><a href="#cb14-49" aria-hidden="true" tabindex="-1"></a>                best_corr <span class="op">=</span> avg_corr</span>
+<span id="cb14-50"><a href="#cb14-50" aria-hidden="true" tabindex="-1"></a>                best_params <span class="op">=</span> (l, a)</span>
+<span id="cb14-51"><a href="#cb14-51" aria-hidden="true" tabindex="-1"></a>                </span>
+<span id="cb14-52"><a href="#cb14-52" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> best_params, best_corr</span>
+<span id="cb14-53"><a href="#cb14-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-54"><a href="#cb14-54" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Ejemplo de uso ---</span></span>
+<span id="cb14-55"><a href="#cb14-55" aria-hidden="true" tabindex="-1"></a><span class="co"># Rangos de búsqueda recomendados para empezar</span></span>
+<span id="cb14-56"><a href="#cb14-56" aria-hidden="true" tabindex="-1"></a>lambdas_range <span class="op">=</span> np.linspace(<span class="fl">0.01</span>, <span class="fl">0.5</span>, <span class="dv">30</span>)</span>
+<span id="cb14-57"><a href="#cb14-57" aria-hidden="true" tabindex="-1"></a>alphas_range <span class="op">=</span> np.linspace(<span class="fl">0.05</span>, <span class="fl">0.95</span>, <span class="dv">30</span>)</span>
+<span id="cb14-58"><a href="#cb14-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-59"><a href="#cb14-59" aria-hidden="true" tabindex="-1"></a>best_p, best_c <span class="op">=</span> optimize_xg_params(df_shots, lambdas_range, alphas_range)</span>
+<span id="cb14-60"><a href="#cb14-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-61"><a href="#cb14-61" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Mejor Lambda: </span><span class="sc">{</span>best_p[<span class="dv">0</span>]<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
+<span id="cb14-62"><a href="#cb14-62" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Mejor Alpha: </span><span class="sc">{</span>best_p[<span class="dv">1</span>]<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
+<span id="cb14-63"><a href="#cb14-63" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Correlación máxima con xG StatsBomb: </span><span class="sc">{</span>best_c<span class="sc">:.4f}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>Mejor Lambda: 0.1790
+Mejor Alpha: 0.1741
+Correlación máxima con xG StatsBomb: 0.6591</code></pre>
+</div>
+</div>
+<p>El término <span class="math inline">\(-0.179 \cdot d_{porteria}\)</span> representa el decaimiento base. Por cada metro de distancia adicional que te alejas de la portería, el exponente sufre una penalización constante de 0.179. Es el esqueleto del modelo: un tiro desde 10 metros siempre tendrá, de base, un exponente de -1.79 antes de mirar qué hacen los defensas.</p>
+<p>El término <span class="math inline">\(-0.1741 \cdot N_{cono}\)</span> castiga cada jugador que se interpone en tu ángulo de visión hacia los palos. Como <span class="math inline">\(\lambda\)</span> y <span class="math inline">\(\alpha\)</span> son casi idénticos (0.179 frente a 0.1741), el modelo nos está diciendo que tener a un jugador más bloqueando la visión castiga tu probabilidad de gol casi lo mismo que alejar el tiro 1 metro más atrás.</p>
+<p>El término <span class="math inline">\(-\frac{0.8259}{d_{rival}}\)</span> es el más agresivo y el que define la urgencia de la toma de decisión. Al estar la distancia del rival dividiendo, su efecto se dispara cuando el defensor está muy cerca:Si el rival está a 5 metros (poca presión), la penalización es pequeña: <span class="math inline">\(0.8259 / 5 = 0.165\)</span>.Si el rival te está encimando a 1 metro (presión extrema), la penalización explota a 0.8259.Para compensar esa presión de tener a un tío a un metro, tendrías que acercar el balón casi 4.6 metros hacia la portería (<span class="math inline">\(0.8259 / 0.179\)</span>). Esto demuestra que el modelo pondera muchísimo el tiempo y espacio de ejecución: un tiro lejano pero totalmente libre de marca puede tener mejor xG que un tiro más cercano pero con un central echándose encima.</p>
+<div id="0e533ed5" class="cell" data-execution_count="10">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>df_shots[<span class="st">'formula_base'</span>] <span class="op">=</span> df_shots.<span class="bu">apply</span>(</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_probabilidad_gol(row[<span class="st">'jugadores_en_cono'</span>], row[<span class="st">'dist_rival_cercano_cono'</span>], row[<span class="st">'dist_centro_porteria'</span>], lambda_metrica<span class="op">=</span><span class="fl">0.179</span>, alpha<span class="op">=</span><span class="fl">0.1741</span>), axis<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>df_passes[<span class="st">'formula_base'</span>] <span class="op">=</span> df_passes.<span class="bu">apply</span>(</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_probabilidad_gol(row[<span class="st">'jugadores_en_cono'</span>], row[<span class="st">'dist_rival_cercano_cono'</span>], row[<span class="st">'dist_centro_porteria'</span>], lambda_metrica<span class="op">=</span><span class="fl">0.179</span>, alpha<span class="op">=</span><span class="fl">0.1741</span>), axis<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Cálculo de métricas de ajuste</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Correlación de Pearson</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>correlacion <span class="op">=</span> df_shots[<span class="st">'formula_base'</span>].corr(df_shots[<span class="st">'shot_statsbomb_xg'</span>])</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Coeficiente de Determinación (R^2)</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>r2 <span class="op">=</span> r2_score(df_shots[<span class="st">'shot_statsbomb_xg'</span>], df_shots[<span class="st">'formula_base'</span>])</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"--- RESULTADOS DE VALIDACIÓN ---"</span>)</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Correlación de Pearson: </span><span class="sc">{</span>correlacion<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Coeficiente de determinación (R^2): </span><span class="sc">{</span>r2<span class="sc">:.4f}</span><span class="ss">"</span>)</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Visualización: Scatter plot para ver la dispersión</span></span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>plt.figure(figsize<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">6</span>))</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a>sns.scatterplot(data<span class="op">=</span>df_shots, x<span class="op">=</span><span class="st">'formula_base'</span>, y<span class="op">=</span><span class="st">'shot_statsbomb_xg'</span>, alpha<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Añadimos la línea de identidad (y=x)</span></span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>plt.plot([<span class="dv">0</span>, <span class="dv">1</span>], [<span class="dv">0</span>, <span class="dv">1</span>], color<span class="op">=</span><span class="st">'red'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, label<span class="op">=</span><span class="st">'Línea de identidad (x=y)'</span>)</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>plt.title(<span class="st">'Comparación: Modelo Base vs StatsBomb xG'</span>)</span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>plt.xlabel(<span class="st">'Probabilidad Base (Modelo Propio)'</span>)</span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a>plt.ylabel(<span class="st">'StatsBomb xG'</span>)</span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a>plt.legend()</span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>--- RESULTADOS DE VALIDACIÓN ---
+Correlación de Pearson: 0.6556
+Coeficiente de determinación (R^2): 0.2876</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="02_metodologia_files/figure-html/cell-11-output-2.png" width="663" height="524" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="cálculo-del-incremento-en-la-probabilidad-de-gol-respecto-a-compañeros-libres." class="level2" data-number="3.5">
+<h2 data-number="3.5" class="anchored" data-anchor-id="cálculo-del-incremento-en-la-probabilidad-de-gol-respecto-a-compañeros-libres."><span class="header-section-number">3.5</span> Cálculo del incremento en la probabilidad de gol respecto a compañeros libres.</h2>
+<p>En esta sección, el objetivo será calcular una métrica que nos explique la toma de decisión tanto de delanteros como de los asistentes (último pase). Para cada tiro/pase clave, evaluaremos dicho freeze-frame para identificar a todos los compañeros que pudieran recibir un pase desde esa posición. Si el pase no es interceptado en línea recta suponiendo que los defensores tienen un pequeño radio de 1 metro, entonces, calculamos la probabilidad de meter gol desde la posición del compañero. Haremos esto para cada compañero visible y nos quedaremos con la probabilidad máxima del mejor compañero visible. Con esta probabilidad, seremos capaces de, para cada pase/tiro, calcular el incremento en la probabilidad si se hubiera tomado otra decisión.</p>
+<div id="270f67a8" class="cell" data-execution_count="11">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Valor centinela para cuando no hay rivales (libertad total)</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>VALOR_LIBERTAD_TOTAL <span class="op">=</span> <span class="fl">60.0</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> esta_en_fuera_de_juego(pos, balon_x, linea_defensiva_x):</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Verifica si un jugador está en fuera de juego."""</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pos[<span class="dv">0</span>] <span class="op">&gt;</span> linea_defensiva_x <span class="kw">and</span> pos[<span class="dv">0</span>] <span class="op">&gt;</span> balon_x</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> esta_linea_bloqueada(origen, destino, rivales, radio_bloqueo<span class="op">=</span><span class="fl">0.5</span>):</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Verifica si la trayectoria está bloqueada por algún rival[cite: 2, 3]."""</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    p1, p2 <span class="op">=</span> np.array(origen), np.array(destino)</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> rival <span class="kw">in</span> rivales:</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>        r <span class="op">=</span> np.array(rival[<span class="st">'location'</span>])</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Consideramos el radio del jugador (0.5m)</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> np.linalg.norm(r <span class="op">-</span> p1) <span class="op">&lt;</span> <span class="fl">0.5</span>: <span class="cf">continue</span> </span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>        dist <span class="op">=</span> np.<span class="bu">abs</span>(np.cross(p2<span class="op">-</span>p1, p1<span class="op">-</span>r)) <span class="op">/</span> np.linalg.norm(p2<span class="op">-</span>p1)</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> dist <span class="op">&lt;</span> radio_bloqueo: <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> calcular_mejor_opcion_tiro_con_bloqueo(row, freeze_frame_col, radio_bloqueo<span class="op">=</span><span class="dv">1</span>, radio_percepcion<span class="op">=</span><span class="fl">15.0</span>):</span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a><span class="co">    Calcula la probabilidad de gol de los compañeros en un radio restrictivo de 30 yardas.</span></span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a><span class="co">    Sin factores de corrección de pase, solo la probabilidad de la fórmula pura.</span></span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a>    frame <span class="op">=</span> row[freeze_frame_col]</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> <span class="bu">isinstance</span>(frame, <span class="bu">list</span>):</span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> np.nan</span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a>    actor_loc <span class="op">=</span> <span class="bu">next</span>((p[<span class="st">'location'</span>] <span class="cf">for</span> p <span class="kw">in</span> frame <span class="cf">if</span> p.get(<span class="st">'actor'</span>, <span class="va">False</span>)), <span class="va">None</span>)</span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> actor_loc <span class="kw">is</span> <span class="va">None</span>: <span class="cf">return</span> np.nan</span>
+<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Identificar línea defensiva para fuera de juego</span></span>
+<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a>    rivales_x <span class="op">=</span> <span class="bu">sorted</span>([p[<span class="st">'location'</span>][<span class="dv">0</span>] <span class="cf">for</span> p <span class="kw">in</span> frame <span class="cf">if</span> <span class="kw">not</span> p.get(<span class="st">'teammate'</span>, <span class="va">True</span>)], reverse<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb18-36"><a href="#cb18-36" aria-hidden="true" tabindex="-1"></a>    penultimo_defensor_x <span class="op">=</span> rivales_x[<span class="dv">1</span>] <span class="cf">if</span> <span class="bu">len</span>(rivales_x) <span class="op">&gt;</span> <span class="dv">1</span> <span class="cf">else</span> <span class="fl">120.0</span></span>
+<span id="cb18-37"><a href="#cb18-37" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-38"><a href="#cb18-38" aria-hidden="true" tabindex="-1"></a>    rivales_en_frame <span class="op">=</span> [p <span class="cf">for</span> p <span class="kw">in</span> frame <span class="cf">if</span> <span class="kw">not</span> p.get(<span class="st">'teammate'</span>, <span class="va">True</span>) <span class="kw">and</span> <span class="kw">not</span> p.get(<span class="st">'actor'</span>, <span class="va">False</span>)]</span>
+<span id="cb18-39"><a href="#cb18-39" aria-hidden="true" tabindex="-1"></a>    probabilidades <span class="op">=</span> []</span>
+<span id="cb18-40"><a href="#cb18-40" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb18-41"><a href="#cb18-41" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> player <span class="kw">in</span> frame:</span>
+<span id="cb18-42"><a href="#cb18-42" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> player.get(<span class="st">'teammate'</span>, <span class="va">True</span>) <span class="kw">and</span> <span class="kw">not</span> player.get(<span class="st">'actor'</span>, <span class="va">False</span>):</span>
+<span id="cb18-43"><a href="#cb18-43" aria-hidden="true" tabindex="-1"></a>            pos <span class="op">=</span> player[<span class="st">'location'</span>]</span>
+<span id="cb18-44"><a href="#cb18-44" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb18-45"><a href="#cb18-45" aria-hidden="true" tabindex="-1"></a>            <span class="co"># FILTRO ESPACIAL MÁS RESTRICTIVO: 30 yardas</span></span>
+<span id="cb18-46"><a href="#cb18-46" aria-hidden="true" tabindex="-1"></a>            dist_al_actor <span class="op">=</span> np.linalg.norm(np.array(pos) <span class="op">-</span> np.array(actor_loc))</span>
+<span id="cb18-47"><a href="#cb18-47" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> dist_al_actor <span class="op">&gt;</span> radio_percepcion:</span>
+<span id="cb18-48"><a href="#cb18-48" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
+<span id="cb18-49"><a href="#cb18-49" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb18-50"><a href="#cb18-50" aria-hidden="true" tabindex="-1"></a>            <span class="co"># FILTRO: Fuera de juego</span></span>
+<span id="cb18-51"><a href="#cb18-51" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> esta_en_fuera_de_juego(pos, actor_loc[<span class="dv">0</span>], penultimo_defensor_x):</span>
+<span id="cb18-52"><a href="#cb18-52" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
+<span id="cb18-53"><a href="#cb18-53" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb18-54"><a href="#cb18-54" aria-hidden="true" tabindex="-1"></a>            <span class="co"># FILTRO: Bloqueo línea de tiro[cite: 3]</span></span>
+<span id="cb18-55"><a href="#cb18-55" aria-hidden="true" tabindex="-1"></a>            <span class="cf">if</span> esta_linea_bloqueada(pos, GOAL_CENTER, rivales_en_frame, radio_bloqueo):</span>
+<span id="cb18-56"><a href="#cb18-56" aria-hidden="true" tabindex="-1"></a>                <span class="cf">continue</span></span>
+<span id="cb18-57"><a href="#cb18-57" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb18-58"><a href="#cb18-58" aria-hidden="true" tabindex="-1"></a>            <span class="co"># CÁLCULO DE PROBABILIDAD PURA</span></span>
+<span id="cb18-59"><a href="#cb18-59" aria-hidden="true" tabindex="-1"></a>            dist_p <span class="op">=</span> calcular_distancia_porteria(pos)</span>
+<span id="cb18-60"><a href="#cb18-60" aria-hidden="true" tabindex="-1"></a>            _, rivales, _ <span class="op">=</span> calcular_jugadores_en_cono(pos, frame)</span>
+<span id="cb18-61"><a href="#cb18-61" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb18-62"><a href="#cb18-62" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Aplicamos centinela para presión nula</span></span>
+<span id="cb18-63"><a href="#cb18-63" aria-hidden="true" tabindex="-1"></a>            dist_rival <span class="op">=</span> calcular_distancia_rival_cercano_cono(pos, frame)</span>
+<span id="cb18-64"><a href="#cb18-64" aria-hidden="true" tabindex="-1"></a>            dist_presion <span class="op">=</span> dist_rival <span class="cf">if</span> <span class="kw">not</span> pd.isna(dist_rival) <span class="cf">else</span> VALOR_LIBERTAD_TOTAL</span>
+<span id="cb18-65"><a href="#cb18-65" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb18-66"><a href="#cb18-66" aria-hidden="true" tabindex="-1"></a>            <span class="co"># Probabilidad tal cual</span></span>
+<span id="cb18-67"><a href="#cb18-67" aria-hidden="true" tabindex="-1"></a>            p_gol <span class="op">=</span> calcular_probabilidad_gol(rivales, dist_presion, dist_p)</span>
+<span id="cb18-68"><a href="#cb18-68" aria-hidden="true" tabindex="-1"></a>            probabilidades.append(p_gol)</span>
+<span id="cb18-69"><a href="#cb18-69" aria-hidden="true" tabindex="-1"></a>            </span>
+<span id="cb18-70"><a href="#cb18-70" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="bu">max</span>(probabilidades) <span class="cf">if</span> probabilidades <span class="cf">else</span> <span class="fl">0.0</span></span>
+<span id="cb18-71"><a href="#cb18-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-72"><a href="#cb18-72" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Aplicación ---</span></span>
+<span id="cb18-73"><a href="#cb18-73" aria-hidden="true" tabindex="-1"></a>df_shots[<span class="st">'mejor_prob_posible'</span>] <span class="op">=</span> df_shots.<span class="bu">apply</span>(</span>
+<span id="cb18-74"><a href="#cb18-74" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_mejor_opcion_tiro_con_bloqueo(row, <span class="st">'freeze_frame'</span>), axis<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb18-75"><a href="#cb18-75" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb18-76"><a href="#cb18-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-77"><a href="#cb18-77" aria-hidden="true" tabindex="-1"></a>df_passes[<span class="st">'prob_opcion_pase_tiro'</span>] <span class="op">=</span> df_passes.<span class="bu">apply</span>(</span>
+<span id="cb18-78"><a href="#cb18-78" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> row: calcular_mejor_opcion_tiro_con_bloqueo(row, <span class="st">'freeze_frame_360_pass'</span>), axis<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb18-79"><a href="#cb18-79" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>Ahora, calculamos cuántos pases y tiros mejorarían si se tomara otra decisión:</p>
+<div id="87e521f7" class="cell" data-execution_count="12">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Calcular porcentajes de mejora</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>pct_shots_mejor <span class="op">=</span> (df_shots[<span class="st">'mejor_prob_posible'</span>] <span class="op">&gt;</span> df_shots[<span class="st">'formula_base'</span>]).mean() <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>pct_passes_mejor <span class="op">=</span> (df_passes[<span class="st">'prob_opcion_pase_tiro'</span>] <span class="op">&gt;</span> df_passes[<span class="st">'shot_statsbomb_xg_shot'</span>]).mean() <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Print resumen</span></span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"--- RESUMEN DE MEJORA EN DECISIONES ---"</span>)</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"% de tiros donde pasar habría dado más probabilidad: </span><span class="sc">{</span>pct_shots_mejor<span class="sc">:.2f}</span><span class="ss">%"</span>)</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"% de pases donde otra opción habría sido mejor: </span><span class="sc">{</span>pct_passes_mejor<span class="sc">:.2f}</span><span class="ss">%"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>--- RESUMEN DE MEJORA EN DECISIONES ---
+% de tiros donde pasar habría dado más probabilidad: 48.72%
+% de pases donde otra opción habría sido mejor: 24.17%</code></pre>
+</div>
+</div>
+<p>Por último, nos cargamos ambos dataframes de nuevo para la parte de resultados:</p>
+<div id="89132b3c" class="cell" data-execution_count="13">
+<details class="code-fold">
+<summary>Ver código</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>df_passes.to_parquet(<span class="st">"../data/processed/pases_post_metodologia.parquet"</span>, index<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>df_shots.to_parquet(<span class="st">"../data/processed/tiros_post_metodologia.parquet"</span>, index <span class="op">=</span> <span class="va">False</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+<nav class="page-navigation">
+  <div class="nav-page nav-page-previous">
+      <a href="../notebooks/01_data_preprocessing.html" class="pagination-link" aria-label="Preprocesamiento de los datos">
+        <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Preprocesamiento de los datos</span></span>
+      </a>          
+  </div>
+  <div class="nav-page nav-page-next">
+      <a href="../notebooks/03_resultados.html" class="pagination-link" aria-label="Resultados">
+        <span class="nav-page-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Resultados</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
+  </div>
+</nav>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

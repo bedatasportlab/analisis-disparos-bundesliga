@@ -8,7 +8,7 @@ En este capítulo, el objetivo será construir el conjunto de datos inicial sobr
 
 En esta fase inicial, establecemos los cimientos de nuestro conjunto de datos analítico procesando la materia prima suministrada por StatsBomb. Dado el considerable volumen computacional que implica cargar el historial completo de eventos de una competición, implementamos una estrategia de filtrado en origen.
 
-El proceso recorre secuencialmente el directorio de eventos procesados, extrayendo de manera exclusiva las acciones del equipo objeto de estudio (Bayer Leverkusen). Por cada partido, dividimos la información en dos flujos principales:
+El proceso recorre secuencialmente el directorio de eventos procesados. Por cada partido, dividimos la información en dos flujos principales:
 
 1. Disparos (Shots): Todos los tiros registrados por StatsBomb.
 2. Pases Clave (Key Passes): Aquellos pases que están referenciados directamente como la acción previa a un disparo, garantizando la trazabilidad de la secuencia ofensiva. 

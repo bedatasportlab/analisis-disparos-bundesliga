@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>2&nbsp; Preprocesamiento de los datos – Título Provisional : Análisis Ofensivo del Bayer Leverkusen</title>
+<title>2&nbsp; Preprocesamiento de los datos – Análisis de Tiros en la Bundesliga 2023/24</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -68,6 +68,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
+<link href="../notebooks/02_metodologia.html" rel="next">
 <link href="../index.html" rel="prev">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
@@ -78,7 +79,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-7f8f88aac4f3542376d5c11b86a4c14d.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e3e5b9121e68b3f077afb32f2c64d95.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-631496449bf32ff9b0bb69a6bfd9195d.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -135,9 +136,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
     <div class="pt-lg-2 mt-2 text-left sidebar-header">
     <div class="sidebar-title mb-0 py-0">
-      <a href="../">Título Provisional : Análisis Ofensivo del Bayer Leverkusen</a> 
+      <a href="../">Análisis de Tiros en la Bundesliga 2023/24</a> 
         <div class="sidebar-tools-main">
-    <a href="../Título-Provisional---Análisis-Ofensivo-del-Bayer-Leverkusen.pdf" title="Download PDF" class="quarto-navigation-tool px-1" aria-label="Download PDF"><i class="bi bi-file-pdf"></i></a>
+    <a href="../Análisis-de-Tiros-en-la-Bundesliga-2023-24.pdf" title="Download PDF" class="quarto-navigation-tool px-1" aria-label="Download PDF"><i class="bi bi-file-pdf"></i></a>
 </div>
     </div>
       </div>
@@ -160,6 +161,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
  <span class="menu-text"><span class="chapter-number">2</span>&nbsp; <span class="chapter-title">Preprocesamiento de los datos</span></span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/02_metodologia.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Metodología</span></span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../notebooks/03_resultados.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text"><span class="chapter-number">4</span>&nbsp; <span class="chapter-title">Resultados</span></span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -170,11 +183,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <h2 id="toc-title">Índice de contenidos</h2>
    
   <ul>
-  <li><a href="#ingesta-y-extracción-de-datos-base" id="toc-ingesta-y-extracción-de-datos-base" class="nav-link active" data-scroll-target="#ingesta-y-extracción-de-datos-base"><span class="header-section-number">3</span> Ingesta y Extracción de Datos Base</a></li>
-  <li><a href="#filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias" id="toc-filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias" class="nav-link" data-scroll-target="#filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias"><span class="header-section-number">4</span> Filtrado de Contexto Dinámico (Open Play) y unificación de secuencias</a></li>
-  <li><a href="#integración-del-contexto-espacial-statsbomb-360" id="toc-integración-del-contexto-espacial-statsbomb-360" class="nav-link" data-scroll-target="#integración-del-contexto-espacial-statsbomb-360"><span class="header-section-number">5</span> Integración del Contexto Espacial (StatsBomb 360)</a></li>
-  <li><a href="#selección-de-variables" id="toc-selección-de-variables" class="nav-link" data-scroll-target="#selección-de-variables"><span class="header-section-number">6</span> Selección de Variables</a></li>
-  <li><a href="#exportación-de-los-datasets" id="toc-exportación-de-los-datasets" class="nav-link" data-scroll-target="#exportación-de-los-datasets"><span class="header-section-number">7</span> Exportación de los Datasets</a></li>
+  <li><a href="#ingesta-y-extracción-de-datos-base" id="toc-ingesta-y-extracción-de-datos-base" class="nav-link active" data-scroll-target="#ingesta-y-extracción-de-datos-base"><span class="header-section-number">2.1</span> Ingesta y Extracción de Datos Base</a></li>
+  <li><a href="#filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias" id="toc-filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias" class="nav-link" data-scroll-target="#filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias"><span class="header-section-number">2.2</span> Filtrado de Contexto Dinámico (Open Play) y unificación de secuencias</a></li>
+  <li><a href="#integración-del-contexto-espacial-statsbomb-360" id="toc-integración-del-contexto-espacial-statsbomb-360" class="nav-link" data-scroll-target="#integración-del-contexto-espacial-statsbomb-360"><span class="header-section-number">2.3</span> Integración del Contexto Espacial (StatsBomb 360)</a></li>
+  <li><a href="#selección-de-variables" id="toc-selección-de-variables" class="nav-link" data-scroll-target="#selección-de-variables"><span class="header-section-number">2.4</span> Selección de Variables</a></li>
+  <li><a href="#exportación-de-los-datasets" id="toc-exportación-de-los-datasets" class="nav-link" data-scroll-target="#exportación-de-los-datasets"><span class="header-section-number">2.5</span> Exportación de los Datasets</a></li>
   </ul>
 </nav>
     </div>
@@ -201,22 +214,22 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 
 <p>En este capítulo, el objetivo será construir el conjunto de datos inicial sobre el que vamos a calcular las métricas necesarias para hacer el estudio sobre las finalizaciones y sus tiros previos.</p>
-<section id="ingesta-y-extracción-de-datos-base" class="level1" data-number="3">
-<h1 data-number="3"><span class="header-section-number">3</span> Ingesta y Extracción de Datos Base</h1>
+<section id="ingesta-y-extracción-de-datos-base" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="ingesta-y-extracción-de-datos-base"><span class="header-section-number">2.1</span> Ingesta y Extracción de Datos Base</h2>
 <p>En esta fase inicial, establecemos los cimientos de nuestro conjunto de datos analítico procesando la materia prima suministrada por StatsBomb. Dado el considerable volumen computacional que implica cargar el historial completo de eventos de una competición, implementamos una estrategia de filtrado en origen.</p>
-<p>El proceso recorre secuencialmente el directorio de eventos procesados, extrayendo de manera exclusiva las acciones del equipo objeto de estudio (Bayer Leverkusen). Por cada partido, dividimos la información en dos flujos principales:</p>
+<p>El proceso recorre secuencialmente el directorio de eventos procesados. Por cada partido, dividimos la información en dos flujos principales:</p>
 <ol type="1">
 <li>Disparos (Shots): Todos los tiros registrados por StatsBomb.</li>
 <li>Pases Clave (Key Passes): Aquellos pases que están referenciados directamente como la acción previa a un disparo, garantizando la trazabilidad de la secuencia ofensiva.</li>
 </ol>
 <p>Simultáneamente, extraemos y consolidamos los datos de cada partido cargando el diccionario de partidos y las alineaciones de cada uno. De esta manera podremos enriquecer posteriormente los análisis realizados.</p>
-<div id="255c8948" class="cell" data-execution_count="1">
+<div id="c85f9ed1" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Ver código</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os </span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">#os.chdir("notebook") # Poner si es necesario</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">#os.chdir("notebooks") # Poner si es necesario</span></span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Definimos las rutas a los directorios de datos procesados</span></span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># (Ajusta estas rutas según la estructura exacta de tus carpetas)</span></span>
@@ -313,12 +326,12 @@ Total de registros de alineación procesados: 68</code></pre>
 <p>La diferencia entre la muestra total de disparos y los pases clave asociados es un patrón absolutamente normal. Esta reducción en los pases clave ocurre generalmente porque el evento general de disparo engloba finalizaciones que carecen de un pasador previo, tales como las acciones directas a balón parado (como penalties o tiros libre) o jugadas individuales donde el rematador finaliza tras crear su propia ventaja posicional.</p>
 <p>Los modelos que construiremos en este trabajo se basan en la toma de decisiones tanto del lanzador como en la del pasador. Por lo tanto, el siguiente paso consiste en filtrar los disparos para quedarnos con aquellos producidos en situación de “Open Play”. Excluiremos jugadas precedidas de córner, penalties o tiros libres.</p>
 </section>
-<section id="filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias" class="level1" data-number="4">
-<h1 data-number="4"><span class="header-section-number">4</span> Filtrado de Contexto Dinámico (Open Play) y unificación de secuencias</h1>
+<section id="filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="filtrado-de-contexto-dinámico-open-play-y-unificación-de-secuencias"><span class="header-section-number">2.2</span> Filtrado de Contexto Dinámico (Open Play) y unificación de secuencias</h2>
 <p>Una vez consolidada la extracción de eventos, el siguiente paso de nuestro pipeline consiste en seleccionar la muestra para alinearla con los objetivos de la investigación a realizar. Dado que buscamos evaluar la toma de decisiones tácticas y la oclusión en escenarios de juego fluido, debemos descartar aquellas finalizaciones originadas a balón parado.</p>
 <p>Para ello, aplicamos un filtro sobre la tipología específica del disparo (shot.type), conservando de manera exclusiva los remates categorizados como “Open Play”. Esta operación elimina de nuestra muestra poblacional los lanzamientos de penalti, los tiros libres directos y los saques de esquina directos, dejándonos tanto los tiros asistidos en dinámica como las jugadas individuales autónomas.</p>
 <p>Posteriormente, construimos nuestro dataset relacional de secuencias ofensivas. Mediante una operación de unión (join), enlazamos estructuralmente los pases clave con sus correspondientes disparos en “Open Play”. Utilizando el identificador único del pase y la variable de enlace del disparo (shot_key_pass_id), logramos colapsar la secuencia temporal “Pase -&gt; Tiro” en una única fila plana.</p>
-<div id="e1efeec3" class="cell" data-execution_count="2">
+<div id="8fb2553b" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Ver código</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># =====================================================================</span></span>
@@ -365,15 +378,15 @@ Secuencias completas ensambladas (Pase -&gt; Tiro en Open Play): 690</code></pre
 <p>Por otro lado, la operación de unión relacional nos confirma un total de 690 secuencias completas (Pase clave -&gt; Tiro). Esta submuestra representa nuestro núcleo analítico de mayor valor para estudiar la perspectiva de los asistidores, permitiéndonos evaluar el contexto previo a la finalización y analizar cómo sus pases habilitaron el espacio para el tirador.</p>
 <p>Con los eventos de tiro filtrados y las secuencias tiro/pase construidas, el siguiente paso metodológico consistirá en dotar a estas acciones de su correspondiente contexto 360.</p>
 </section>
-<section id="integración-del-contexto-espacial-statsbomb-360" class="level1" data-number="5">
-<h1 data-number="5"><span class="header-section-number">5</span> Integración del Contexto Espacial (StatsBomb 360)</h1>
+<section id="integración-del-contexto-espacial-statsbomb-360" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="integración-del-contexto-espacial-statsbomb-360"><span class="header-section-number">2.3</span> Integración del Contexto Espacial (StatsBomb 360)</h2>
 <p>La precisión de los modelos a construir posteriormente depende intrínsecamente de la disponibilidad de las coordenadas de los jugadores en los momentos críticos de la jugada. En esta fase, integramos la capa espacial StatsBomb 360, la cual captura las ubicaciones del ecosistema de jugadores en el instante exacto de la acción.</p>
 <p>Para aislar nuestra muestra definitiva de estudio, implementamos dos operaciones de unión relacional restrictiva (inner joins) utilizando el identificador único del evento (event_uuid):</p>
 <ol type="1">
 <li><p><strong>Disparos aislados</strong>: Cruzamos la población de remates <em>Open Play</em> con la base de datos 360, descartando disparos que no tengan asignado freeze frame.</p></li>
 <li><p><strong>Secuencias Pase/tiro</strong>: Aplicamos dos uniones. Exigimos que, para analizar posteriormente estas secuencias, necesitamos el 360 del pase clave y del tiro. Si uno de los dos eventos carece del 360, la secuencia se elimina del análisis.</p></li>
 </ol>
-<div id="8018b04e" class="cell" data-execution_count="3">
+<div id="f86438aa" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Ver código</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># =====================================================================</span></span>
@@ -455,10 +468,10 @@ Secuencias perfectas (360 en Pase Y Tiro): 600</code></pre>
 <p>Por otro lado, para el segundo enfoque de la investigación sobre la toma de decisiones de los pasadores, tenemos un total de 600 secuencias de pase y tiro con el 360 integrado. Esto significa que logramos retener el 87% de los 690 pases clave originales.</p>
 <p>Con los dataset finales ya creados, el siguiente objetivo será elegir las variables necesarias para comenzar el análisis en profundidad para la creación de nuevas métricas.</p>
 </section>
-<section id="selección-de-variables" class="level1" data-number="6">
-<h1 data-number="6"><span class="header-section-number">6</span> Selección de Variables</h1>
+<section id="selección-de-variables" class="level2" data-number="2.4">
+<h2 data-number="2.4" class="anchored" data-anchor-id="selección-de-variables"><span class="header-section-number">2.4</span> Selección de Variables</h2>
 <p>En esta etapa final del pre-procesamiento, vamos a elegir las variables sólamente necesarias de cada dataframe para reducir la dimensionalidad. Sólamente conservaremos las variables necesarias tanto para la creación de nuevas métricas como para la posterior validación.</p>
-<div id="769acb19" class="cell" data-execution_count="4">
+<div id="6f90119f" class="cell" data-execution_count="4">
 <details class="code-fold">
 <summary>Ver código</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># =====================================================================</span></span>
@@ -574,9 +587,9 @@ Secuencias perfectas (360 en Pase Y Tiro): 600</code></pre>
 </details>
 </div>
 </section>
-<section id="exportación-de-los-datasets" class="level1" data-number="7">
-<h1 data-number="7"><span class="header-section-number">7</span> Exportación de los Datasets</h1>
-<div id="3e6cbbd2" class="cell" data-execution_count="5">
+<section id="exportación-de-los-datasets" class="level2" data-number="2.5">
+<h2 data-number="2.5" class="anchored" data-anchor-id="exportación-de-los-datasets"><span class="header-section-number">2.5</span> Exportación de los Datasets</h2>
+<div id="8bf83e0b" class="cell" data-execution_count="5">
 <details class="code-fold">
 <summary>Ver código</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Guardado final optimizado</span></span>
@@ -998,6 +1011,9 @@ Secuencias perfectas (360 en Pase Y Tiro): 600</code></pre>
       </a>          
   </div>
   <div class="nav-page nav-page-next">
+      <a href="../notebooks/02_metodologia.html" class="pagination-link" aria-label="Metodología">
+        <span class="nav-page-text"><span class="chapter-number">3</span>&nbsp; <span class="chapter-title">Metodología</span></span> <i class="bi bi-arrow-right-short"></i>
+      </a>
   </div>
 </nav>
 </div> <!-- /content -->
