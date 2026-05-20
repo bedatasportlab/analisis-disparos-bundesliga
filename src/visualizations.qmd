@@ -1,0 +1,1334 @@
+---
+title: "Visualizacion de un disparo con StatsBomb 360"
+jupyter: python3
+format:
+  html:
+    toc: false
+    code-fold: true
+    code-summary: "Ver codigo"
+execute:
+  warning: false
+  message: false
+---
+
+Este documento carga los disparos con freeze frame 360 ya procesados y dibuja varias vistas para un unico disparo:
+
+1. Campo con jugadores y medidas generales StatsBomb: largo 120 y ancho 80.
+2. Campo sin medidas, con el lanzador, el cono hacia los palos y los rivales que ocupan ese angulo resaltados.
+3. Desglose de las penalizaciones de la formula de probabilidad de gol para ese disparo.
+4. Medio campo con los companeros disponibles segun la trayectoria de pase.
+5. Medio campo para el pase previo al tiro, comparando receptor real y mejor opcion disponible.
+
+```{python}
+import ast
+import math
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.lines import Line2D
+from matplotlib.patches import Arc, Circle, Patch, Polygon, Rectangle
+```
+
+## Configuracion
+
+Cambia `SHOT_ID` si quieres dibujar un disparo concreto. Si lo dejas como `None`, se usara la fila indicada en `SHOT_INDEX`.
+
+```{python}
+DATA_PATH = Path("../data/processed/shots_360_analysis.parquet")
+PASS_DATA_PATH = Path("../data/processed/shots_pass_360_analysis.parquet")
+
+SHOT_ID = None
+SHOT_INDEX = 2
+
+PASS_ID = None
+PASS_INDEX = 19
+
+PITCH_LENGTH = 120.0
+PITCH_WIDTH = 80.0
+GOAL_POST_LEFT = np.array([120.0, 36.0])
+GOAL_POST_RIGHT = np.array([120.0, 44.0])
+GOAL_CENTER = np.array([120.0, 40.0])
+
+LAMBDA_FORMULA = 0.179
+ALPHA_FORMULA = 0.1741
+VALOR_LIBERTAD_TOTAL = 60.0
+DISTANCIA_MINIMA_PRESION = 0.1
+RADIO_INTERCEPCION_PASE = 2.0
+```
+
+```{python}
+def parse_spatial_data(value):
+    """Convierte strings de listas/diccionarios a objetos Python si hace falta."""
+    if value is None:
+        return value
+    if isinstance(value, float) and pd.isna(value):
+        return value
+    if isinstance(value, str):
+        try:
+            return ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            return value
+    return value
+
+
+def parse_location(location):
+    """Devuelve una coordenada [x, y] como array numerico."""
+    location = parse_spatial_data(location)
+    if not isinstance(location, (list, tuple, np.ndarray)) or len(location) < 2:
+        return None
+    return np.array([float(location[0]), float(location[1])])
+
+
+def freeze_frame_to_dataframe(freeze_frame):
+    """Normaliza el freeze frame de StatsBomb 360 a un dataframe de jugadores."""
+    freeze_frame = parse_spatial_data(freeze_frame)
+    if not isinstance(freeze_frame, list):
+        return pd.DataFrame(columns=["x", "y", "teammate", "is_keeper", "is_actor", "player_name"])
+
+    players = []
+    for player in freeze_frame:
+        if not isinstance(player, dict):
+            continue
+
+        location = parse_location(player.get("location"))
+        if location is None:
+            continue
+
+        is_keeper = bool(player.get("keeper", False))
+        is_actor = bool(player.get("actor", False))
+        teammate = bool(player.get("teammate", False))
+
+        # En los freeze frames de tiro, el portero marcado por StatsBomb es el rival que defiende la porteria.
+        if is_keeper:
+            teammate = False
+
+        players.append(
+            {
+                "x": location[0],
+                "y": location[1],
+                "teammate": teammate,
+                "is_keeper": is_keeper,
+                "is_actor": is_actor,
+                "player_name": player.get("player_name", ""),
+            }
+        )
+
+    return pd.DataFrame(players)
+
+
+def point_in_triangle(point, a, b, c):
+    """Comprueba si un punto esta dentro del triangulo definido por a, b y c."""
+    point = np.array(point, dtype=float)
+    a = np.array(a, dtype=float)
+    b = np.array(b, dtype=float)
+    c = np.array(c, dtype=float)
+
+    def sign(p1, p2, p3):
+        return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+
+    d1 = sign(point, a, b)
+    d2 = sign(point, b, c)
+    d3 = sign(point, c, a)
+
+    has_negative = (d1 < 0) or (d2 < 0) or (d3 < 0)
+    has_positive = (d1 > 0) or (d2 > 0) or (d3 > 0)
+    return not (has_negative and has_positive)
+
+
+def add_players_in_cone(players, shooter_location):
+    """Marca los rivales situados dentro del angulo de tiro."""
+    players = players.copy()
+    if players.empty:
+        players["in_shot_angle"] = []
+        return players
+
+    players["in_shot_angle"] = players.apply(
+        lambda row: (
+            (not row["teammate"] or row.get("is_keeper", False))
+            and point_in_triangle(
+                [row["x"], row["y"]],
+                shooter_location,
+                GOAL_POST_LEFT,
+                GOAL_POST_RIGHT,
+            )
+        ),
+        axis=1,
+    )
+    return players
+```
+
+```{python}
+df_shots = pd.read_parquet(DATA_PATH)
+
+for column in ["location", "shot_end_location", "visible_area", "freeze_frame"]:
+    if column in df_shots.columns:
+        df_shots[column] = df_shots[column].apply(parse_spatial_data)
+
+df_pass_sequences = pd.read_parquet(PASS_DATA_PATH)
+
+for column in [
+    "location_pass",
+    "pass_end_location_pass",
+    "visible_area_360_pass",
+    "freeze_frame_360_pass",
+    "location_shot",
+    "shot_end_location_shot",
+    "visible_area_360_shot",
+    "freeze_frame_360_shot",
+]:
+    if column in df_pass_sequences.columns:
+        df_pass_sequences[column] = df_pass_sequences[column].apply(parse_spatial_data)
+
+if SHOT_ID is not None:
+    selected = df_shots.loc[df_shots["id"].eq(SHOT_ID)]
+    if selected.empty:
+        raise ValueError(f"No existe ningun disparo con id={SHOT_ID!r}.")
+    shot = selected.iloc[0]
+else:
+    shot = df_shots.iloc[SHOT_INDEX]
+
+shooter_location = parse_location(shot["location"])
+players = freeze_frame_to_dataframe(shot["freeze_frame"])
+players = add_players_in_cone(players, shooter_location)
+
+if PASS_ID is not None:
+    pass_selected = df_pass_sequences.loc[df_pass_sequences["id_pass"].eq(PASS_ID)]
+elif "id_shot" in df_pass_sequences.columns:
+    pass_selected = df_pass_sequences.loc[df_pass_sequences["id_shot"].eq(shot.get("id"))]
+elif "shot_key_pass_id" in df_shots.columns:
+    pass_selected = df_pass_sequences.loc[df_pass_sequences["id_pass"].eq(shot.get("shot_key_pass_id"))]
+else:
+    pass_selected = pd.DataFrame()
+
+if pass_selected.empty:
+    pass_sequence = df_pass_sequences.iloc[PASS_INDEX]
+else:
+    pass_sequence = pass_selected.iloc[0]
+
+shot_summary = {
+    "match_id": shot.get("match_id"),
+    "minuto": shot.get("minute"),
+    "segundo": shot.get("second"),
+    "equipo": shot.get("team_name"),
+    "lanzador": shot.get("player_name"),
+    "resultado": shot.get("shot_outcome_name"),
+    "xG_statsbomb": shot.get("shot_statsbomb_xg"),
+    "rivales_en_angulo": int(players["in_shot_angle"].sum()) if not players.empty else 0,
+    "porteros_detectados": int(players["is_keeper"].sum()) if not players.empty else 0,
+}
+
+pd.DataFrame([shot_summary])
+```
+
+## Funciones de dibujo
+
+```{python}
+def draw_statsbomb_pitch(ax, show_measurements=True, half_pitch=False):
+    """Dibuja un campo horizontal en coordenadas StatsBomb: 120 x 80."""
+    line_color = "#2f3437"
+    pitch_color = "#fbfbf7"
+
+    ax.set_facecolor(pitch_color)
+    ax.set_xlim(60 if half_pitch else 0, PITCH_LENGTH)
+    ax.set_ylim(PITCH_WIDTH, 0)
+    ax.set_aspect("equal")
+
+    # Lineas principales.
+    ax.add_patch(Rectangle((0, 0), PITCH_LENGTH, PITCH_WIDTH, fill=False, ec=line_color, lw=1.6))
+    ax.plot([60, 60], [0, 80], color=line_color, lw=1.1)
+    ax.add_patch(Circle((60, 40), 10, fill=False, ec=line_color, lw=1.1))
+    ax.add_patch(Circle((60, 40), 0.7, color=line_color))
+
+    # Areas y puntos de penalti.
+    ax.add_patch(Rectangle((0, 18), 18, 44, fill=False, ec=line_color, lw=1.1))
+    ax.add_patch(Rectangle((102, 18), 18, 44, fill=False, ec=line_color, lw=1.1))
+    ax.add_patch(Rectangle((0, 30), 6, 20, fill=False, ec=line_color, lw=1.1))
+    ax.add_patch(Rectangle((114, 30), 6, 20, fill=False, ec=line_color, lw=1.1))
+    ax.add_patch(Circle((12, 40), 0.7, color=line_color))
+    ax.add_patch(Circle((108, 40), 0.7, color=line_color))
+    ax.add_patch(Arc((12, 40), 20, 20, theta1=310, theta2=50, color=line_color, lw=1.1))
+    ax.add_patch(Arc((108, 40), 20, 20, theta1=130, theta2=230, color=line_color, lw=1.1))
+
+    # Porteria atacada en este disparo.
+    ax.plot([120, 120], [36, 44], color="#111827", lw=4, solid_capstyle="butt")
+
+    if show_measurements:
+        ax.set_xticks([0, PITCH_LENGTH])
+        ax.set_yticks([0, PITCH_WIDTH])
+        ax.set_xlabel("Largo StatsBomb: 120")
+        ax.set_ylabel("Ancho StatsBomb: 80")
+        ax.tick_params(labelsize=10, colors="#3f3f46")
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+    else:
+        ax.set_axis_off()
+
+
+def scatter_players(ax, players, highlight_angle=False):
+    """Dibuja companeros, rivales y portero rival."""
+    if players.empty:
+        return
+
+    teammates = players[players["teammate"] & ~players["is_keeper"]]
+    opponents = players[~players["teammate"]]
+    opponent_field = opponents[~opponents["is_keeper"]]
+    opponent_keepers = opponents[opponents["is_keeper"]]
+    opponents_in_angle = opponent_field[opponent_field["in_shot_angle"]]
+    opponents_out_angle = opponent_field[~opponent_field["in_shot_angle"]]
+    keepers_in_angle = opponent_keepers[opponent_keepers["in_shot_angle"]]
+    keepers_out_angle = opponent_keepers[~opponent_keepers["in_shot_angle"]]
+
+    if not teammates.empty:
+        ax.scatter(
+            teammates["x"],
+            teammates["y"],
+            s=95,
+            c="#2563eb",
+            edgecolors="white",
+            linewidths=1.4,
+            zorder=5,
+            label="Companeros",
+        )
+
+    if highlight_angle:
+        if not opponents_out_angle.empty:
+            ax.scatter(
+                opponents_out_angle["x"],
+                opponents_out_angle["y"],
+                s=85,
+                c="#dc2626",
+                edgecolors="white",
+                linewidths=1.2,
+                alpha=0.72,
+                zorder=5,
+                label="Rivales",
+            )
+        if not opponents_in_angle.empty:
+            ax.scatter(
+                opponents_in_angle["x"],
+                opponents_in_angle["y"],
+                s=180,
+                c="#dc2626",
+                edgecolors="#facc15",
+                linewidths=2.5,
+                zorder=7,
+                label="Rivales dentro del angulo",
+            )
+        if not keepers_out_angle.empty:
+            ax.scatter(
+                keepers_out_angle["x"],
+                keepers_out_angle["y"],
+                s=150,
+                marker="s",
+                c="#991b1b",
+                edgecolors="white",
+                linewidths=1.4,
+                zorder=6,
+                label="Portero rival",
+            )
+        if not keepers_in_angle.empty:
+            ax.scatter(
+                keepers_in_angle["x"],
+                keepers_in_angle["y"],
+                s=230,
+                marker="s",
+                c="#991b1b",
+                edgecolors="#facc15",
+                linewidths=2.6,
+                zorder=8,
+                label="Portero rival dentro del angulo",
+            )
+    else:
+        if not opponent_field.empty:
+            ax.scatter(
+                opponent_field["x"],
+                opponent_field["y"],
+                s=95,
+                c="#dc2626",
+                edgecolors="white",
+                linewidths=1.4,
+                zorder=5,
+                label="Rivales",
+            )
+        if not opponent_keepers.empty:
+            ax.scatter(
+                opponent_keepers["x"],
+                opponent_keepers["y"],
+                s=150,
+                marker="s",
+                c="#991b1b",
+                edgecolors="white",
+                linewidths=1.4,
+                zorder=6,
+                label="Portero rival",
+            )
+
+
+def draw_shooter(ax, shooter_location):
+    ax.scatter(
+        shooter_location[0],
+        shooter_location[1],
+        s=260,
+        marker="*",
+        c="#0f172a",
+        edgecolors="#facc15",
+        linewidths=1.5,
+        zorder=8,
+        label="Lanzador",
+    )
+
+
+def shot_angle_degrees(shooter_location):
+    v_left = GOAL_POST_LEFT - shooter_location
+    v_right = GOAL_POST_RIGHT - shooter_location
+    cosine = np.dot(v_left, v_right) / (np.linalg.norm(v_left) * np.linalg.norm(v_right))
+    return math.degrees(math.acos(np.clip(cosine, -1.0, 1.0)))
+
+
+def distance_to_goal_center(location):
+    return float(np.linalg.norm(GOAL_CENTER - location))
+
+
+def nearest_opponent_distance_in_cone(players, shooter_location):
+    if players.empty:
+        return VALOR_LIBERTAD_TOTAL
+
+    opponents_in_angle = players[(~players["teammate"]) & players["in_shot_angle"]].copy()
+    if opponents_in_angle.empty:
+        return VALOR_LIBERTAD_TOTAL
+
+    distances = np.sqrt(
+        (opponents_in_angle["x"] - shooter_location[0]) ** 2
+        + (opponents_in_angle["y"] - shooter_location[1]) ** 2
+    )
+    return float(distances.min())
+
+
+def nearest_opponent(players, shooter_location, in_angle_only=True):
+    """Devuelve el rival mas cercano al lanzador y su distancia."""
+    if players.empty:
+        return None, np.nan
+
+    opponents = players[~players["teammate"]].copy()
+    if in_angle_only:
+        opponents = opponents[opponents["in_shot_angle"]].copy()
+
+    if opponents.empty:
+        return None, np.nan
+
+    opponents["distance_to_shooter"] = np.sqrt(
+        (opponents["x"] - shooter_location[0]) ** 2
+        + (opponents["y"] - shooter_location[1]) ** 2
+    )
+    nearest = opponents.sort_values("distance_to_shooter").iloc[0]
+    return nearest, float(nearest["distance_to_shooter"])
+
+
+def draw_distance_guides(ax, shooter_location, players):
+    """Dibuja las lineas de distancia a porteria y al rival mas cercano."""
+    goal_distance = distance_to_goal_center(shooter_location)
+
+    ax.plot(
+        [shooter_location[0], GOAL_CENTER[0]],
+        [shooter_location[1], GOAL_CENTER[1]],
+        color="#2563eb",
+        lw=2,
+        ls="--",
+        zorder=6,
+    )
+
+    nearest, nearest_distance = nearest_opponent(players, shooter_location, in_angle_only=True)
+    label_suffix = "en angulo"
+    if nearest is None:
+        nearest, nearest_distance = nearest_opponent(players, shooter_location, in_angle_only=False)
+        label_suffix = "visible"
+
+    if nearest is None:
+        return {
+            "goal_distance": goal_distance,
+            "nearest_distance": np.nan,
+            "nearest_label_suffix": label_suffix,
+        }
+
+    nearest_location = np.array([nearest["x"], nearest["y"]])
+    ax.plot(
+        [shooter_location[0], nearest_location[0]],
+        [shooter_location[1], nearest_location[1]],
+        color="#7c3aed",
+        lw=2,
+        ls=":",
+        zorder=7,
+    )
+    return {
+        "goal_distance": goal_distance,
+        "nearest_distance": nearest_distance,
+        "nearest_label_suffix": label_suffix,
+    }
+
+
+def probability_breakdown(shooter_location, players, lambda_metrica=LAMBDA_FORMULA, alpha=ALPHA_FORMULA):
+    dist_porteria = distance_to_goal_center(shooter_location)
+    rivales_en_cono = int((~players["teammate"] & players["in_shot_angle"]).sum()) if not players.empty else 0
+    dist_presion = nearest_opponent_distance_in_cone(players, shooter_location)
+    dist_presion_formula = max(dist_presion, DISTANCIA_MINIMA_PRESION)
+
+    penalizacion_distancia = lambda_metrica * dist_porteria
+    penalizacion_cono = alpha * rivales_en_cono
+    penalizacion_presion = (1 - alpha) / dist_presion_formula
+    penalizacion_total = penalizacion_distancia + penalizacion_cono + penalizacion_presion
+    probabilidad = float(np.clip(np.exp(-penalizacion_total), 0.0, 1.0))
+
+    return {
+        "distancia_porteria": dist_porteria,
+        "rivales_en_cono": rivales_en_cono,
+        "distancia_rival_cercano_cono": dist_presion,
+        "penalizacion_distancia": penalizacion_distancia,
+        "penalizacion_cono": penalizacion_cono,
+        "penalizacion_presion": penalizacion_presion,
+        "penalizacion_total": penalizacion_total,
+        "probabilidad_formula": probabilidad,
+    }
+
+
+def distance_point_to_segment(px, py, x1, y1, x2, y2):
+    dx = x2 - x1
+    dy = y2 - y1
+    segment_length_squared = dx**2 + dy**2
+
+    if segment_length_squared == 0:
+        return math.sqrt((px - x1) ** 2 + (py - y1) ** 2), 0.0
+
+    t = ((px - x1) * dx + (py - y1) * dy) / segment_length_squared
+    t_clamped = max(0.0, min(1.0, t))
+    projected_x = x1 + t_clamped * dx
+    projected_y = y1 + t_clamped * dy
+    distance = math.sqrt((px - projected_x) ** 2 + (py - projected_y) ** 2)
+
+    return distance, t
+
+
+def opponents_cutting_pass(origin, destination, opponents, radio=RADIO_INTERCEPCION_PASE):
+    """Devuelve rivales que interceptan el segmento entre lanzador y companero."""
+    if opponents.empty:
+        return []
+
+    blockers = []
+    x1, y1 = origin
+    x2, y2 = destination
+
+    for opponent_index, opponent in opponents.iterrows():
+        distance, t = distance_point_to_segment(
+            opponent["x"],
+            opponent["y"],
+            x1,
+            y1,
+            x2,
+            y2,
+        )
+
+        if 0 < t < 1 and distance <= radio:
+            blockers.append(
+                {
+                    "player_index": opponent_index,
+                    "x": opponent["x"],
+                    "y": opponent["y"],
+                    "distance_to_pass_line": distance,
+                }
+            )
+
+    return blockers
+
+
+def teammate_pass_options(players, shooter_location, radio=RADIO_INTERCEPCION_PASE):
+    """Evalua que companeros tienen una trayectoria de pase sin rival."""
+    if players.empty:
+        return pd.DataFrame(
+            columns=[
+                "player_index",
+                "x",
+                "y",
+                "distance_to_shooter",
+                "pass_available",
+                "num_blockers",
+                "blockers",
+            ]
+        )
+
+    teammates = players[players["teammate"] & ~players["is_keeper"] & ~players["is_actor"]].copy()
+    opponents = players[~players["teammate"]].copy()
+    records = []
+
+    for player_index, teammate in teammates.iterrows():
+        destination = np.array([teammate["x"], teammate["y"]])
+        blockers = opponents_cutting_pass(shooter_location, destination, opponents, radio=radio)
+        distance_to_shooter = float(np.linalg.norm(destination - shooter_location))
+
+        records.append(
+            {
+                "player_index": player_index,
+                "x": teammate["x"],
+                "y": teammate["y"],
+                "distance_to_shooter": distance_to_shooter,
+                "pass_available": len(blockers) == 0,
+                "num_blockers": len(blockers),
+                "blockers": blockers,
+            }
+        )
+
+    return pd.DataFrame(records)
+
+
+def draw_pass_availability(ax, players, shooter_location, pass_options, radio=RADIO_INTERCEPCION_PASE):
+    """Dibuja trayectorias disponibles y bloqueadas hacia companeros."""
+    opponents = players[~players["teammate"]].copy() if not players.empty else pd.DataFrame()
+    opponent_field = opponents[~opponents["is_keeper"]] if not opponents.empty else pd.DataFrame()
+    opponent_keepers = opponents[opponents["is_keeper"]] if not opponents.empty else pd.DataFrame()
+
+    blocker_indices = {
+        blocker["player_index"]
+        for blockers in pass_options["blockers"].tolist()
+        for blocker in blockers
+    } if not pass_options.empty else set()
+
+    if not pass_options.empty:
+        for _, option in pass_options.iterrows():
+            color = "#15803d" if option["pass_available"] else "#9ca3af"
+            alpha = 0.88 if option["pass_available"] else 0.35
+            linewidth = 2.4 if option["pass_available"] else 1.3
+            ax.plot(
+                [shooter_location[0], option["x"]],
+                [shooter_location[1], option["y"]],
+                color=color,
+                lw=linewidth,
+                alpha=alpha,
+                zorder=3,
+            )
+
+    if not opponent_field.empty:
+        normal_opponents = opponent_field[~opponent_field.index.isin(blocker_indices)]
+        blocker_opponents = opponent_field[opponent_field.index.isin(blocker_indices)]
+
+        if not normal_opponents.empty:
+            ax.scatter(
+                normal_opponents["x"],
+                normal_opponents["y"],
+                s=85,
+                c="#dc2626",
+                edgecolors="white",
+                linewidths=1.2,
+                alpha=0.72,
+                zorder=5,
+            )
+        if not blocker_opponents.empty:
+            ax.scatter(
+                blocker_opponents["x"],
+                blocker_opponents["y"],
+                s=165,
+                c="#dc2626",
+                edgecolors="#f97316",
+                linewidths=2.6,
+                zorder=7,
+            )
+
+    if not opponent_keepers.empty:
+        keeper_edgecolors = [
+            "#f97316" if idx in blocker_indices else "white"
+            for idx in opponent_keepers.index
+        ]
+        keeper_linewidths = [
+            2.6 if idx in blocker_indices else 1.4
+            for idx in opponent_keepers.index
+        ]
+        ax.scatter(
+            opponent_keepers["x"],
+            opponent_keepers["y"],
+            s=155,
+            marker="s",
+            c="#991b1b",
+            edgecolors=keeper_edgecolors,
+            linewidths=keeper_linewidths,
+            zorder=7,
+        )
+
+    if not pass_options.empty:
+        available = pass_options[pass_options["pass_available"]]
+        blocked = pass_options[~pass_options["pass_available"]]
+
+        if not blocked.empty:
+            ax.scatter(
+                blocked["x"],
+                blocked["y"],
+                s=85,
+                c="#93c5fd",
+                edgecolors="white",
+                linewidths=1.2,
+                alpha=0.65,
+                zorder=6,
+            )
+        if not available.empty:
+            ax.scatter(
+                available["x"],
+                available["y"],
+                s=140,
+                c="#16a34a",
+                edgecolors="white",
+                linewidths=1.6,
+                zorder=8,
+            )
+
+    draw_shooter(ax, shooter_location)
+
+    return {
+        "available_count": int(pass_options["pass_available"].sum()) if not pass_options.empty else 0,
+        "teammate_count": len(pass_options),
+        "blocker_count": len(blocker_indices),
+        "radio": radio,
+    }
+
+
+def select_best_available_receiver(receiver_options):
+    available = receiver_options[receiver_options["pass_available"]].copy()
+    if available.empty:
+        return None
+    return available.sort_values("probabilidad_gol", ascending=False).iloc[0]
+
+
+def evaluate_pass_receiver_options(players, passer_location, pass_end_location, radio=RADIO_INTERCEPCION_PASE):
+    """Evalua receptores visibles: trayectoria libre, receptor real y probabilidad de gol."""
+    options = teammate_pass_options(players, passer_location, radio=radio)
+    if options.empty:
+        return options
+
+    records = []
+    for _, option in options.iterrows():
+        receiver_location = np.array([option["x"], option["y"]])
+        receiver_players = add_players_in_cone(players.copy(), receiver_location)
+        receiver_breakdown = probability_breakdown(receiver_location, receiver_players)
+        distance_to_real_end = (
+            float(np.linalg.norm(receiver_location - pass_end_location))
+            if pass_end_location is not None
+            else np.nan
+        )
+
+        records.append(
+            {
+                **option.to_dict(),
+                "distancia_destino_real": distance_to_real_end,
+                "probabilidad_gol": receiver_breakdown["probabilidad_formula"],
+                "rivales_en_angulo_receptor": receiver_breakdown["rivales_en_cono"],
+                "distancia_porteria_receptor": receiver_breakdown["distancia_porteria"],
+            }
+        )
+
+    receiver_options = pd.DataFrame(records)
+
+    if pass_end_location is not None and receiver_options["distancia_destino_real"].notna().any():
+        real_receiver_idx = receiver_options["distancia_destino_real"].idxmin()
+        receiver_options["receptor_real"] = False
+        receiver_options.loc[real_receiver_idx, "receptor_real"] = True
+    else:
+        receiver_options["receptor_real"] = False
+
+    best_receiver = select_best_available_receiver(receiver_options)
+    receiver_options["mejor_opcion_disponible"] = False
+    if best_receiver is not None:
+        receiver_options.loc[best_receiver.name, "mejor_opcion_disponible"] = True
+
+    return receiver_options
+
+
+def draw_arrow(ax, origin, destination, color, linewidth=2.0, alpha=1.0, linestyle="-", zorder=4):
+    ax.annotate(
+        "",
+        xy=(destination[0], destination[1]),
+        xytext=(origin[0], origin[1]),
+        arrowprops={
+            "arrowstyle": "->",
+            "color": color,
+            "lw": linewidth,
+            "alpha": alpha,
+            "linestyle": linestyle,
+            "shrinkA": 5,
+            "shrinkB": 5,
+        },
+        zorder=zorder,
+    )
+
+
+def draw_pass_decision(ax, players, passer_location, pass_end_location, receiver_options):
+    """Dibuja el pase real y la mejor opcion disponible."""
+    opponents = players[~players["teammate"]].copy() if not players.empty else pd.DataFrame()
+    opponent_field = opponents[~opponents["is_keeper"]] if not opponents.empty else pd.DataFrame()
+    opponent_keepers = opponents[opponents["is_keeper"]] if not opponents.empty else pd.DataFrame()
+
+    blocker_indices = {
+        blocker["player_index"]
+        for blockers in receiver_options["blockers"].tolist()
+        for blocker in blockers
+    } if not receiver_options.empty else set()
+
+    if not receiver_options.empty:
+        for _, option in receiver_options.iterrows():
+            destination = np.array([option["x"], option["y"]])
+            if option["mejor_opcion_disponible"]:
+                continue
+            color = "#15803d" if option["pass_available"] else "#9ca3af"
+            alpha = 0.72 if option["pass_available"] else 0.28
+            linewidth = 1.7 if option["pass_available"] else 1.1
+            draw_arrow(
+                ax,
+                passer_location,
+                destination,
+                color=color,
+                linewidth=linewidth,
+                alpha=alpha,
+                zorder=3,
+            )
+
+        best_options = receiver_options[receiver_options["mejor_opcion_disponible"]]
+        if not best_options.empty:
+            best = best_options.iloc[0]
+            best_location = np.array([best["x"], best["y"]])
+            draw_arrow(
+                ax,
+                passer_location,
+                best_location,
+                color="#f59e0b",
+                linewidth=3.4,
+                alpha=0.98,
+                zorder=6,
+            )
+
+    if pass_end_location is not None:
+        draw_arrow(
+            ax,
+            passer_location,
+            pass_end_location,
+            color="#2563eb",
+            linewidth=2.8,
+            alpha=0.95,
+            linestyle="--",
+            zorder=7,
+        )
+        ax.scatter(
+            pass_end_location[0],
+            pass_end_location[1],
+            s=95,
+            marker="X",
+            c="#2563eb",
+            edgecolors="white",
+            linewidths=1.3,
+            zorder=8,
+        )
+
+    if not opponent_field.empty:
+        normal_opponents = opponent_field[~opponent_field.index.isin(blocker_indices)]
+        blocker_opponents = opponent_field[opponent_field.index.isin(blocker_indices)]
+
+        if not normal_opponents.empty:
+            ax.scatter(
+                normal_opponents["x"],
+                normal_opponents["y"],
+                s=85,
+                c="#dc2626",
+                edgecolors="white",
+                linewidths=1.2,
+                alpha=0.72,
+                zorder=8,
+            )
+        if not blocker_opponents.empty:
+            ax.scatter(
+                blocker_opponents["x"],
+                blocker_opponents["y"],
+                s=165,
+                c="#dc2626",
+                edgecolors="#f97316",
+                linewidths=2.6,
+                zorder=9,
+            )
+
+    if not opponent_keepers.empty:
+        ax.scatter(
+            opponent_keepers["x"],
+            opponent_keepers["y"],
+            s=155,
+            marker="s",
+            c="#991b1b",
+            edgecolors="white",
+            linewidths=1.4,
+            zorder=8,
+        )
+
+    if not receiver_options.empty:
+        blocked = receiver_options[~receiver_options["pass_available"]]
+        available = receiver_options[receiver_options["pass_available"]]
+        real_receiver = receiver_options[receiver_options["receptor_real"]]
+        best_receiver = receiver_options[receiver_options["mejor_opcion_disponible"]]
+
+        if not blocked.empty:
+            ax.scatter(
+                blocked["x"],
+                blocked["y"],
+                s=85,
+                c="#93c5fd",
+                edgecolors="white",
+                linewidths=1.2,
+                alpha=0.58,
+                zorder=10,
+            )
+        if not available.empty:
+            ax.scatter(
+                available["x"],
+                available["y"],
+                s=125,
+                c="#16a34a",
+                edgecolors="white",
+                linewidths=1.4,
+                zorder=11,
+            )
+        if not real_receiver.empty:
+            ax.scatter(
+                real_receiver["x"],
+                real_receiver["y"],
+                s=210,
+                marker="D",
+                c="#2563eb",
+                edgecolors="white",
+                linewidths=1.6,
+                zorder=12,
+            )
+        if not best_receiver.empty:
+            ax.scatter(
+                best_receiver["x"],
+                best_receiver["y"],
+                s=260,
+                marker="*",
+                c="#f59e0b",
+                edgecolors="#111827",
+                linewidths=1.2,
+                zorder=13,
+            )
+
+    ax.scatter(
+        passer_location[0],
+        passer_location[1],
+        s=240,
+        marker="P",
+        c="#0f172a",
+        edgecolors="#facc15",
+        linewidths=1.4,
+        zorder=14,
+    )
+
+    best_receiver = select_best_available_receiver(receiver_options) if not receiver_options.empty else None
+    real_rows = receiver_options[receiver_options["receptor_real"]] if not receiver_options.empty else pd.DataFrame()
+    real_receiver = real_rows.iloc[0] if not real_rows.empty else None
+
+    return {
+        "available_count": int(receiver_options["pass_available"].sum()) if not receiver_options.empty else 0,
+        "receiver_count": len(receiver_options),
+        "best_probability": best_receiver["probabilidad_gol"] if best_receiver is not None else np.nan,
+        "real_probability": real_receiver["probabilidad_gol"] if real_receiver is not None else np.nan,
+        "real_available": bool(real_receiver["pass_available"]) if real_receiver is not None else False,
+        "best_is_real": bool(real_receiver["mejor_opcion_disponible"]) if real_receiver is not None else False,
+    }
+```
+
+## Campo completo con jugadores y medidas
+
+```{python}
+fig, ax = plt.subplots(figsize=(12, 8))
+draw_statsbomb_pitch(ax, show_measurements=True, half_pitch=False)
+scatter_players(ax, players, highlight_angle=False)
+draw_shooter(ax, shooter_location)
+
+ax.set_title(
+    f"Disparo de {shot.get('player_name', 'jugador')} | "
+    f"{shot.get('team_name', 'equipo')} | "
+    f"{shot.get('minute', '')}:{int(shot.get('second', 0)):02d}",
+    fontsize=14,
+    pad=14,
+)
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08), ncol=4, frameon=False)
+
+fig.tight_layout()
+plt.show()
+```
+
+## Medio campo con angulo de tiro
+
+```{python}
+fig, ax = plt.subplots(figsize=(10, 8))
+draw_statsbomb_pitch(ax, show_measurements=False, half_pitch=True)
+
+cone = Polygon(
+    [shooter_location, GOAL_POST_LEFT, GOAL_POST_RIGHT],
+    closed=True,
+    facecolor="#facc15",
+    edgecolor="#ca8a04",
+    linewidth=1.8,
+    alpha=0.24,
+    zorder=3,
+)
+ax.add_patch(cone)
+ax.plot(
+    [shooter_location[0], GOAL_POST_LEFT[0]],
+    [shooter_location[1], GOAL_POST_LEFT[1]],
+    color="#ca8a04",
+    lw=1.8,
+    zorder=4,
+)
+ax.plot(
+    [shooter_location[0], GOAL_POST_RIGHT[0]],
+    [shooter_location[1], GOAL_POST_RIGHT[1]],
+    color="#ca8a04",
+    lw=1.8,
+    zorder=4,
+)
+
+scatter_players(ax, players, highlight_angle=True)
+draw_shooter(ax, shooter_location)
+distance_info = draw_distance_guides(ax, shooter_location, players)
+
+angle = shot_angle_degrees(shooter_location)
+rival_distance_label = "Rival mas cercano: no visible"
+if pd.notna(distance_info["nearest_distance"]):
+    rival_distance_label = (
+        f"Rival mas cercano ({distance_info['nearest_label_suffix']}): "
+        f"{distance_info['nearest_distance']:.1f} m"
+    )
+
+legend_handles = [
+    Line2D([0], [0], marker="*", color="w", label="Lanzador", markerfacecolor="#0f172a", markeredgecolor="#facc15", markersize=14),
+    Line2D([0], [0], marker="o", color="w", label="Companeros", markerfacecolor="#2563eb", markeredgecolor="white", markersize=10),
+    Line2D([0], [0], marker="o", color="w", label="Rivales", markerfacecolor="#dc2626", markeredgecolor="white", markersize=10),
+    Line2D([0], [0], marker="o", color="w", label="Rivales dentro del angulo", markerfacecolor="#dc2626", markeredgecolor="#facc15", markersize=12),
+    Line2D([0], [0], marker="s", color="w", label="Portero rival", markerfacecolor="#991b1b", markeredgecolor="#facc15", markersize=11),
+    Patch(facecolor="#facc15", edgecolor="#ca8a04", alpha=0.35, label=f"Angulo de tiro: {angle:.1f} deg"),
+    Line2D(
+        [0],
+        [0],
+        color="#2563eb",
+        lw=2,
+        ls="--",
+        label=f"Centro porteria: {distance_info['goal_distance']:.1f} m",
+    ),
+    Line2D([0], [0], color="#7c3aed", lw=2, ls=":", label=rival_distance_label),
+]
+
+ax.legend(
+    handles=legend_handles,
+    loc="upper left",
+    frameon=True,
+    facecolor="white",
+    edgecolor="#d4d4d8",
+    framealpha=0.92,
+    fontsize=9,
+)
+ax.set_title(
+    f"Angulo de tiro y posibles bloqueos | {shot.get('player_name', 'jugador')}",
+    fontsize=14,
+    pad=12,
+)
+
+fig.tight_layout()
+plt.show()
+```
+
+## Medio campo con companeros disponibles para pase
+
+La regla de disponibilidad se basa en la trayectoria directa entre el lanzador y cada companero: si algun rival queda sobre el segmento de pase dentro del radio de intercepcion, ese companero se considera bloqueado.
+
+```{python}
+pass_options = teammate_pass_options(players, shooter_location, radio=RADIO_INTERCEPCION_PASE)
+pass_options_half = pass_options[pass_options["x"].ge(60)].copy() if not pass_options.empty else pass_options.copy()
+
+pass_options_table = pass_options_half.assign(
+    estado=lambda df: np.where(df["pass_available"], "Disponible", "Bloqueado")
+)[["estado", "x", "y", "distance_to_shooter", "num_blockers"]].rename(
+    columns={
+        "x": "x_companero",
+        "y": "y_companero",
+        "distance_to_shooter": "distancia_lanzador",
+        "num_blockers": "rivales_cortando",
+    }
+)
+
+pass_options_table.round(2)
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(10, 8))
+draw_statsbomb_pitch(ax, show_measurements=False, half_pitch=True)
+availability_info = draw_pass_availability(
+    ax,
+    players,
+    shooter_location,
+    pass_options_half,
+    radio=RADIO_INTERCEPCION_PASE,
+)
+
+available_label = (
+    f"Companeros disponibles: "
+    f"{availability_info['available_count']}/{availability_info['teammate_count']}"
+)
+
+legend_handles = [
+    Line2D([0], [0], marker="*", color="w", label="Lanzador", markerfacecolor="#0f172a", markeredgecolor="#facc15", markersize=14),
+    Line2D([0], [0], color="#15803d", lw=2.4, label="Trayectoria disponible"),
+    Line2D([0], [0], color="#9ca3af", lw=1.5, alpha=0.8, label="Trayectoria bloqueada"),
+    Line2D([0], [0], marker="o", color="w", label="Companero disponible", markerfacecolor="#16a34a", markeredgecolor="white", markersize=11),
+    Line2D([0], [0], marker="o", color="w", label="Companero bloqueado", markerfacecolor="#93c5fd", markeredgecolor="white", markersize=10),
+    Line2D([0], [0], marker="o", color="w", label="Rival", markerfacecolor="#dc2626", markeredgecolor="white", markersize=10),
+    Line2D([0], [0], marker="o", color="w", label="Rival cortando pase", markerfacecolor="#dc2626", markeredgecolor="#f97316", markersize=12),
+    Line2D([0], [0], marker="s", color="w", label="Portero rival", markerfacecolor="#991b1b", markeredgecolor="white", markersize=10),
+    Line2D([0], [0], color="none", label=available_label),
+    Line2D([0], [0], color="none", label=f"Radio intercepcion: {availability_info['radio']:.1f} m"),
+]
+
+ax.legend(
+    handles=legend_handles,
+    loc="upper left",
+    frameon=True,
+    facecolor="white",
+    edgecolor="#d4d4d8",
+    framealpha=0.92,
+    fontsize=9,
+)
+ax.set_title(
+    f"Trayectorias de pase disponibles | {shot.get('player_name', 'jugador')}",
+    fontsize=14,
+    pad=12,
+)
+
+fig.tight_layout()
+plt.show()
+```
+
+## Medio campo del pase previo al tiro
+
+Esta vista usa el freeze frame del pase previo. El receptor real se aproxima como el companero visible mas cercano al destino final registrado por StatsBomb (`pass_end_location_pass`). La mejor opcion disponible es el receptor con mayor probabilidad estimada de gol entre los companeros cuya trayectoria no queda cortada por rivales.
+
+```{python}
+passer_location = parse_location(pass_sequence["location_pass"])
+actual_pass_end_location = parse_location(pass_sequence["pass_end_location_pass"])
+pass_players = freeze_frame_to_dataframe(pass_sequence["freeze_frame_360_pass"])
+
+if passer_location is None:
+    raise ValueError("La secuencia seleccionada no tiene location_pass valido.")
+
+receiver_options = evaluate_pass_receiver_options(
+    pass_players,
+    passer_location,
+    actual_pass_end_location,
+    radio=RADIO_INTERCEPCION_PASE,
+)
+
+if receiver_options.empty:
+    receiver_options_table = pd.DataFrame(
+        columns=[
+            "estado",
+            "receptor_real",
+            "mejor_opcion",
+            "x_receptor",
+            "y_receptor",
+            "probabilidad_gol",
+            "rivales_cortando",
+        ]
+    )
+else:
+    receiver_options_table = receiver_options.assign(
+        estado=lambda df: np.where(df["pass_available"], "Disponible", "Bloqueado"),
+        receptor_real=lambda df: np.where(df["receptor_real"], "Si", "No"),
+        mejor_opcion=lambda df: np.where(df["mejor_opcion_disponible"], "Si", "No"),
+    )[[
+        "estado",
+        "receptor_real",
+        "mejor_opcion",
+        "x",
+        "y",
+        "probabilidad_gol",
+        "num_blockers",
+        "distancia_destino_real",
+    ]].rename(
+        columns={
+            "x": "x_receptor",
+            "y": "y_receptor",
+            "num_blockers": "rivales_cortando",
+        }
+    ).sort_values(
+        ["mejor_opcion", "receptor_real", "probabilidad_gol"],
+        ascending=[False, False, False],
+    )
+
+receiver_options_table.round(3)
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(10, 8))
+draw_statsbomb_pitch(ax, show_measurements=False, half_pitch=True)
+
+pass_decision_info = draw_pass_decision(
+    ax,
+    pass_players,
+    passer_location,
+    actual_pass_end_location,
+    receiver_options,
+)
+
+real_label = "Receptor real: no detectado"
+if pd.notna(pass_decision_info["real_probability"]):
+    real_available = "disponible" if pass_decision_info["real_available"] else "bloqueado"
+    real_label = f"Receptor real: p={pass_decision_info['real_probability']:.3f} ({real_available})"
+
+best_label = "Mejor opcion disponible: no hay"
+if pd.notna(pass_decision_info["best_probability"]):
+    best_label = f"Mejor opcion disponible: p={pass_decision_info['best_probability']:.3f}"
+
+decision_label = "El pase fue a la mejor opcion disponible: no"
+if pass_decision_info["best_is_real"]:
+    decision_label = "El pase fue a la mejor opcion disponible: si"
+
+legend_handles = [
+    Line2D([0], [0], marker="P", color="w", label="Pasador", markerfacecolor="#0f172a", markeredgecolor="#facc15", markersize=13),
+    Line2D([0], [0], color="#2563eb", lw=2.8, ls="--", label="Pase realizado"),
+    Line2D([0], [0], color="#f59e0b", lw=3.4, label="Mejor opcion"),
+    Line2D([0], [0], color="#15803d", lw=1.9, label="Opcion disponible"),
+    Line2D([0], [0], color="#9ca3af", lw=1.4, alpha=0.8, label="Opcion bloqueada"),
+    Line2D([0], [0], marker="D", color="w", label="Receptor real aproximado", markerfacecolor="#2563eb", markeredgecolor="white", markersize=10),
+    Line2D([0], [0], marker="*", color="w", label="Mejor receptor", markerfacecolor="#f59e0b", markeredgecolor="#111827", markersize=13),
+    Line2D([0], [0], marker="o", color="w", label="Rival cortando pase", markerfacecolor="#dc2626", markeredgecolor="#f97316", markersize=12),
+    Line2D([0], [0], color="none", label=f"Receptores disponibles: {pass_decision_info['available_count']}/{pass_decision_info['receiver_count']}"),
+    Line2D([0], [0], color="none", label=real_label),
+    Line2D([0], [0], color="none", label=best_label),
+    Line2D([0], [0], color="none", label=decision_label),
+]
+
+ax.legend(
+    handles=legend_handles,
+    loc="upper left",
+    frameon=True,
+    facecolor="white",
+    edgecolor="#d4d4d8",
+    framealpha=0.92,
+    fontsize=8.5,
+)
+
+ax.set_title(
+    f"Pase previo al tiro | {pass_sequence.get('player_name_pass', 'pasador')} -> "
+    f"{pass_sequence.get('player_name_shot', 'receptor')}",
+    fontsize=14,
+    pad=12,
+)
+
+fig.tight_layout()
+plt.show()
+```
+
+## Penalizaciones de la formula de probabilidad
+
+Para esta visualizacion se usa la misma estructura de la formula de metodologia, con `lambda = 0.179` y `alpha = 0.1741`. Aqui `N_cono` cuenta rivales en el angulo, incluyendo el portero rival cuando StatsBomb lo marca en el freeze frame.
+
+$$P(Gol) = \exp\left(-\lambda d_{porteria} - \alpha N_{cono} - \frac{1-\alpha}{d_{rival}}\right)$$
+
+```{python}
+breakdown = probability_breakdown(shooter_location, players)
+
+pd.DataFrame(
+    [
+        {
+            "distancia_porteria": breakdown["distancia_porteria"],
+            "rivales_en_cono": breakdown["rivales_en_cono"],
+            "distancia_rival_cercano_cono": breakdown["distancia_rival_cercano_cono"],
+            "penalizacion_total": breakdown["penalizacion_total"],
+            "probabilidad_formula": breakdown["probabilidad_formula"],
+            "xG_statsbomb": shot.get("shot_statsbomb_xg"),
+        }
+    ]
+).round(4)
+```
+
+```{python}
+penalty_data = pd.DataFrame(
+    {
+        "variable": ["Distancia a porteria", "Rivales en el angulo", "Presion rival cercana"],
+        "penalizacion": [
+            breakdown["penalizacion_distancia"],
+            breakdown["penalizacion_cono"],
+            breakdown["penalizacion_presion"],
+        ],
+    }
+)
+
+stage_labels = ["Sin penalizacion", "Distancia", "Distancia + cono", "Distancia + cono + presion"]
+stage_penalties = [
+    0.0,
+    breakdown["penalizacion_distancia"],
+    breakdown["penalizacion_distancia"] + breakdown["penalizacion_cono"],
+    breakdown["penalizacion_total"],
+]
+stage_probabilities = [float(np.exp(-penalty)) for penalty in stage_penalties]
+
+fig, (ax_penalty, ax_probability) = plt.subplots(
+    1,
+    2,
+    figsize=(13, 5.5),
+    gridspec_kw={"width_ratios": [1.05, 1.25]},
+)
+
+colors = ["#2563eb", "#dc2626", "#f59e0b"]
+ax_penalty.barh(penalty_data["variable"], penalty_data["penalizacion"], color=colors, alpha=0.9)
+ax_penalty.invert_yaxis()
+ax_penalty.set_xlabel("Penalizacion en el exponente")
+ax_penalty.set_title("Peso de cada variable")
+ax_penalty.grid(axis="x", alpha=0.18)
+for idx, value in enumerate(penalty_data["penalizacion"]):
+    ax_penalty.text(value + 0.02, idx, f"{value:.3f}", va="center", fontsize=10)
+
+ax_probability.plot(
+    range(len(stage_probabilities)),
+    stage_probabilities,
+    color="#111827",
+    lw=2.2,
+    marker="o",
+    markersize=7,
+)
+ax_probability.fill_between(
+    range(len(stage_probabilities)),
+    stage_probabilities,
+    step="pre",
+    alpha=0.12,
+    color="#111827",
+)
+ax_probability.set_xticks(range(len(stage_labels)))
+ax_probability.set_xticklabels(stage_labels, rotation=20, ha="right")
+ax_probability.set_ylim(0, 1.03)
+ax_probability.set_ylabel("Probabilidad acumulada")
+ax_probability.set_title("Como cae la probabilidad al aplicar la formula")
+ax_probability.grid(axis="y", alpha=0.18)
+
+for idx, value in enumerate(stage_probabilities):
+    ax_probability.text(idx, value + 0.035, f"{value:.3f}", ha="center", fontsize=10)
+
+if pd.notna(shot.get("shot_statsbomb_xg")):
+    ax_probability.axhline(
+        shot.get("shot_statsbomb_xg"),
+        color="#7c3aed",
+        lw=1.4,
+        ls="--",
+        alpha=0.8,
+        label=f"xG StatsBomb: {shot.get('shot_statsbomb_xg'):.3f}",
+    )
+    ax_probability.legend(frameon=False, loc="upper right")
+
+fig.suptitle(
+    f"Desglose de penalizaciones | {shot.get('player_name', 'jugador')}",
+    fontsize=14,
+    y=1.02,
+)
+fig.tight_layout()
+plt.show()
+```
