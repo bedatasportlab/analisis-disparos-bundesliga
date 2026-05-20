@@ -1,3 +1,163 @@
 ---
-title: "Conclusiones"
+title: "Resultados"
 ---
+
+Para comenzar la sección de resultados importamos primeramente los parquets generados durante la sección de metodología.
+
+```{python}
+#| eval:false
+
+
+df_passes.to_parquet("../data/processed/pases_post_metodologia.parquet", index=False)
+df_shots.to_parquet("../data/processed/tiros_post_metodologia.parquet", index = False)
+```
+
+# Cálculo del incremento de la probabilidad
+
+Para los análisis que se van a realizar en esta sección, primero obtendremos un nuevo valor llamado **incremento**, tanto para *df_passes*, como para *df_shots*. 
+
+Este valor es el resultado de  la resta: *fórmula base - mejor probabilidad de tiro/probabilidad de pase y tiro*.
+
+De esta forma, obtenemos el valor añadido (positivo o negativo) de la toma de decisiones de los jugadores, frente a la mejor opción que tenían en el momento. Se evalúa cómo aumenta o disminuye la probabilidad de marcar un gol, o de dar un pase que acabe en gol según las decisiones tomadas.
+
+```{python}
+#Calcular el incremento para los Tiros
+df_shots['incremento'] = df_shots['formula_base'] - df_shots['mejor_prob_posible']
+#Calcular el incremento para los Pases
+df_passes['incremento'] = df_passes['formula_base'] - df_passes['prob_opcion_pase_tiro']
+
+print("--- Incremento en Tiros (primeras 5 filas) ---")
+print(df_shots[['player_name', 'formula_base', 'mejor_prob_posible', 'incremento']].head())
+print("\n--- Incremento en Pases (primeras 5 filas) ---")
+print(df_passes[['player_name_pass', 'formula_base', 'prob_opcion_pase_tiro', 'incremento']].head())
+
+# Guardar los DataFrames actualizados
+df_shots.to_parquet('tiros_con_incremento.parquet', index=False)
+df_passes.to_parquet('pases_con_incremento.parquet', index=False)
+```
+
+# Normalización ratio gol/tiro o gol/pase
+
+Una vez tenemos la nueva métrica y antes de comparar jugadores, vamos a normalizar el número de goles totales por el número de tiros que ha hecho un jugador.
+
+```{python}
+# Tiros
+df_shots['gol'] = (df_shots['shot_outcome_name'] == 'Goal').astype(int)
+
+ranking_jugadores = df_shots.groupby('player_name').agg(
+    total_tiros=('player_name', 'count'),
+    total_goles=('gol', 'sum')
+)
+ranking_jugadores['goles_por_tiro'] = ranking_jugadores['total_goles'] / ranking_jugadores['total_tiros']
+
+# Asistencias
+df_passes['asistencia_gol'] = (df_passes['shot_outcome_name_shot'].astype(str).str.strip().str.lower() == 'goal').astype(int)
+
+ranking_pasadores = df_passes.groupby('player_name_pass').agg(
+    total_pases=('player_name_pass', 'count'),
+    total_exitos=('asistencia_gol', 'sum')
+)
+
+ranking_pasadores['exitos_por_pase'] = ranking_pasadores['total_exitos'] / ranking_pasadores['total_pases']
+```
+
+# Ránking de jugadores
+
+Una vez se han normalizado los goles según el número de tiros o pases totales que se hayan realizado, se relaciona con la métrica **incremento**.
+De esta forma creamos un ránking en el que vemos no solo quien tira o pasa mejor sino quién toma mejores decisiones.
+
+```{python}
+df_shots['incremento'] = df_shots['formula_base'] - df_shots['mejor_prob_posible']
+df_shots['gol'] = (df_shots['shot_outcome_name'].astype(str).str.strip().str.lower() == 'goal').astype(int)
+
+# Agrupamos por jugador añadiendo el incremento medio
+ranking_tiradores = df_shots.groupby('player_name').agg(
+    total_tiros=('player_name', 'count'),
+    total_goles=('gol', 'sum'),
+    incremento_medio=('incremento', 'mean') # Añadimos la media de sus decisiones
+)
+
+# Calculamos el ratio y filtramos
+ranking_tiradores['goles_por_tiro'] = ranking_tiradores['total_goles'] / ranking_tiradores['total_tiros']
+ranking_final_tiros = ranking_tiradores[ranking_tiradores['total_tiros'] >= 5]
+
+# Ordenamos por los que tienen mejor ratio de gol
+ranking_final_tiros = ranking_final_tiros.sort_values(by='goles_por_tiro', ascending=False)
+
+print("\n--- TOP JUGADORES: GOLES POR TIRO E INCREMENTO ---")
+# Reordenamos las columnas para que se vea claro
+print(ranking_final_tiros[['total_tiros', 'total_goles', 'goles_por_tiro', 'incremento_medio']].head(10))
+```
+
+```{python}
+df_passes['incremento'] = df_passes['formula_base'] - df_passes['prob_opcion_pase_tiro']
+df_passes['asistencia_gol'] = (df_passes['shot_outcome_name_shot'].astype(str).str.strip().str.lower() == 'goal').astype(int)
+
+# Agrupamos por jugador añadiendo el incremento medio
+ranking_pasadores = df_passes.groupby('player_name_pass').agg(
+    total_pases=('player_name_pass', 'count'),
+    total_asistencias=('asistencia_gol', 'sum'),
+    incremento_medio=('incremento', 'mean')
+)
+
+# Calculamos el ratio y filtramos
+ranking_pasadores['asistencias_por_pase'] = ranking_pasadores['total_asistencias'] / ranking_pasadores['total_pases']
+ranking_final_pases = ranking_pasadores[ranking_pasadores['total_pases'] >= 20]
+
+# Ordenamos por los que tienen mejor ratio de asistencia
+ranking_final_pases = ranking_final_pases.sort_values(by='asistencias_por_pase', ascending=False)
+
+print("\n--- TOP JUGADORES: ASISTENCIAS POR PASE E INCREMENTO ---")
+print(ranking_final_pases[['total_pases', 'total_asistencias', 'asistencias_por_pase', 'incremento_medio']].head(10))
+```
+
+```{python}
+# Gráfico TIROS
+
+plt.figure(figsize=(10, 6))
+
+# Usamos regplot para dibujar los puntos y la línea de correlación
+sns.regplot(data=ranking_final_tiros, x='goles_por_tiro', y='incremento_medio', 
+            color='dodgerblue', 
+            scatter_kws={'s': 100, 'alpha': 0.7}, # Estilo de los puntos
+            line_kws={'color': 'darkred', 'linewidth': 2}) # Línea de tendencia en rojo oscuro
+
+plt.title('Tiros: Goles por Tiro vs Incremento Medio', fontsize=14, fontweight='bold')
+plt.xlabel('Efectividad (Goles por Tiro)', fontsize=12)
+plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
+
+# Añadimos el nombre a los 5 mejores tiradores para destacarlos
+top_tiradores = ranking_final_tiros.sort_values(by='goles_por_tiro', ascending=False).head(5)
+for jugador, row in top_tiradores.iterrows():
+    plt.text(row['goles_por_tiro'] + 0.005, row['incremento_medio'], str(jugador), 
+             fontsize=9, color='black', weight='bold')
+
+plt.tight_layout()
+plt.savefig('grafico_tiros.png', dpi=300)
+plt.show()
+```
+
+```{python}
+# Gráfico PASES
+
+plt.figure(figsize=(10, 6))
+
+sns.regplot(data=ranking_final_pases, x='asistencias_por_pase', y='incremento_medio', 
+            color='mediumseagreen', 
+            scatter_kws={'s': 100, 'alpha': 0.7}, 
+            line_kws={'color': 'darkred', 'linewidth': 2}) # Línea de tendencia en rojo oscuro
+
+plt.title('Pases: Asistencias por Pase vs Incremento Medio', fontsize=14, fontweight='bold')
+plt.xlabel('Efectividad (Asistencias por Pase)', fontsize=12)
+plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
+
+# Añadimos el nombre a los 5 mejores pasadores
+top_pasadores = ranking_final_pases.sort_values(by='asistencias_por_pase', ascending=False).head(5)
+for jugador, row in top_pasadores.iterrows():
+    plt.text(row['asistencias_por_pase'] + 0.001, row['incremento_medio'], str(jugador), 
+             fontsize=9, color='black', weight='bold')
+
+plt.tight_layout()
+plt.savefig('grafico_pases.png', dpi=300)
+plt.show()
+```
