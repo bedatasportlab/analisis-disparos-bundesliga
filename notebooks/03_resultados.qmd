@@ -111,16 +111,47 @@ print("\n--- TOP JUGADORES: ASISTENCIAS POR PASE E INCREMENTO ---")
 print(ranking_final_pases[['total_pases', 'total_asistencias', 'asistencias_por_pase', 'incremento_medio']].head(10))
 ```
 
+# Recuento
+
 ```{python}
-# Gráfico TIROS
+# TIROS
+todos_tiradores = df_shots.groupby('player_name')['incremento'].mean().reset_index()
+
+tiros_positivos = len(todos_tiradores[todos_tiradores['incremento'] > 0])
+tiros_negativos = len(todos_tiradores[todos_tiradores['incremento'] < 0])
+total_absoluto_tiradores = len(todos_tiradores)
+
+print("--- RECUENTO TOTAL: TIROS ---")
+print(f"Total de jugadores que han tirado: {total_absoluto_tiradores}")
+print(f"Suman (Positivo): {tiros_positivos} jugadores ({(tiros_positivos/total_absoluto_tiradores)*100:.1f}%)")
+print(f"Restan (Negativo): {tiros_negativos} jugadores ({(tiros_negativos/total_absoluto_tiradores)*100:.1f}%)")
+
+
+# PASES
+todos_pasadores = df_passes.groupby('player_name_pass')['incremento'].mean().reset_index()
+
+pases_positivos = len(todos_pasadores[todos_pasadores['incremento'] > 0])
+pases_negativos = len(todos_pasadores[todos_pasadores['incremento'] < 0])
+total_absoluto_pasadores = len(todos_pasadores)
+
+print("\n--- RECUENTO TOTAL: PASES ---")
+print(f"Total de jugadores que han pasado: {total_absoluto_pasadores}")
+print(f"Suman (Positivo): {pases_positivos} jugadores ({(pases_positivos/total_absoluto_pasadores)*100:.1f}%)")
+print(f"Restan (Negativo): {pases_negativos} jugadores ({(pases_negativos/total_absoluto_pasadores)*100:.1f}%)")
+```
+
+# Gráficos
+
+```{python}
+# Gráfico TIROS - TOP JUGADORES DEL RÁNKING
 
 plt.figure(figsize=(10, 6))
 
 # Usamos regplot para dibujar los puntos y la línea de correlación
 sns.regplot(data=ranking_final_tiros, x='goles_por_tiro', y='incremento_medio', 
             color='dodgerblue', 
-            scatter_kws={'s': 100, 'alpha': 0.7}, # Estilo de los puntos
-            line_kws={'color': 'darkred', 'linewidth': 2}) # Línea de tendencia en rojo oscuro
+            scatter_kws={'s': 100, 'alpha': 0.7},
+            line_kws={'color': 'darkred', 'linewidth': 2})
 
 plt.title('Tiros: Goles por Tiro vs Incremento Medio', fontsize=14, fontweight='bold')
 plt.xlabel('Efectividad (Goles por Tiro)', fontsize=12)
@@ -135,17 +166,40 @@ for jugador, row in top_tiradores.iterrows():
 plt.tight_layout()
 plt.savefig('grafico_tiros.png', dpi=300)
 plt.show()
+
+# Gráfico TIROS - TODOS LOS JUGADORES
+
+plt.figure(figsize=(10, 6))
+
+# Usamos 'ranking_tiradores' que contiene a todos sin filtros
+sns.regplot(data=ranking_tiradores, x='goles_por_tiro', y='incremento_medio', 
+            color='dodgerblue', 
+            scatter_kws={'s': 80, 'alpha': 0.6},
+            line_kws={'color': 'darkred', 'linewidth': 2})
+
+plt.title('Tiros: Goles por Tiro vs Incremento Medio (Todos)', fontsize=14, fontweight='bold')
+plt.xlabel('Efectividad (Goles por Tiro)', fontsize=12)
+plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
+
+top_tiradores = ranking_tiradores.sort_values(by='goles_por_tiro', ascending=False).head(5)
+for jugador, row in top_tiradores.iterrows():
+    plt.text(row['goles_por_tiro'] + 0.005, row['incremento_medio'], str(jugador), 
+             fontsize=9, color='black', weight='bold')
+
+plt.tight_layout()
+plt.savefig('grafico_tiros_todos.png', dpi=300)
+plt.show()
 ```
 
 ```{python}
-# Gráfico PASES
+# Gráfico PASES - TOP JUGADORES DEL RANKING
 
 plt.figure(figsize=(10, 6))
 
 sns.regplot(data=ranking_final_pases, x='asistencias_por_pase', y='incremento_medio', 
             color='mediumseagreen', 
             scatter_kws={'s': 100, 'alpha': 0.7}, 
-            line_kws={'color': 'darkred', 'linewidth': 2}) # Línea de tendencia en rojo oscuro
+            line_kws={'color': 'darkred', 'linewidth': 2})
 
 plt.title('Pases: Asistencias por Pase vs Incremento Medio', fontsize=14, fontweight='bold')
 plt.xlabel('Efectividad (Asistencias por Pase)', fontsize=12)
@@ -159,5 +213,29 @@ for jugador, row in top_pasadores.iterrows():
 
 plt.tight_layout()
 plt.savefig('grafico_pases.png', dpi=300)
+plt.show()
+
+# Gráfico PASES - TODOS LOS JUGADORES
+
+plt.figure(figsize=(10, 6))
+
+# Usamos 'ranking_pasadores' que contiene a todos sin filtros
+sns.regplot(data=ranking_pasadores, x='asistencias_por_pase', y='incremento_medio', 
+            color='mediumseagreen', 
+            scatter_kws={'s': 80, 'alpha': 0.6}, 
+            line_kws={'color': 'darkred', 'linewidth': 2}) 
+
+plt.title('Pases: Asistencias por Pase vs Incremento Medio (Todos)', fontsize=14, fontweight='bold')
+plt.xlabel('Efectividad (Asistencias por Pase)', fontsize=12)
+plt.ylabel('Calidad de Decisión (Incremento Medio)', fontsize=12)
+
+# Añadimos el nombre a los 5 mejores pasadores
+top_pasadores = ranking_pasadores.sort_values(by='asistencias_por_pase', ascending=False).head(5)
+for jugador, row in top_pasadores.iterrows():
+    plt.text(row['asistencias_por_pase'] + 0.001, row['incremento_medio'], str(jugador), 
+             fontsize=9, color='black', weight='bold')
+
+plt.tight_layout()
+plt.savefig('grafico_pases_todos.png', dpi=300)
 plt.show()
 ```

@@ -1,0 +1,78 @@
+En esta sección se presentan los resultados obtenidos. Tras la aplicación de la metodología descrita, se ha evaluado la calidad de la toma de decisiones de los jugadores mediante la métrica del incremento.
+
+Primeramente, el cálculo del incremento ha permitido comparar la probabilidad de éxito de la acción ejecutada por un jugador frente a la probabilidad de éxito de la mejor opción teórica disponible en ese instante. Un incremento positivo indica que el jugador eligió una opción que mejoraba las expectativas del modelo, mientras que un incremento negativo sugiere una toma de decisiones subóptima frente a otras alternativas.
+
+Tomando como ejemplo las primeras cinco observaciones de los finalizadores, se observa que solamente Benjamin Henrichs tomó una decisión mejor que la esperada. En el lado contrario, los incrementos negativos de los otros cuatro futbolistas demuestran que estos decidieron tirar a portería a pesar de tener opciones con mayor probabilidad de éxito a su disposición.
+
+--- Incremento en Tiros (primeras 5 filas) ---
+         player_name  formula_base  mejor_prob_posible  incremento
+0       Granit Xhaka      0.003238            0.187400   -0.184161
+1        Timo Werner      0.017876            0.075884   -0.058008
+2      Jonas Hofmann      0.006782            0.085991   -0.079209
+3  Ikoma Loïs Openda      0.007391            0.095960   -0.088570
+4  Benjamin Henrichs      0.007739            0.000000    0.007739
+
+En cuanto a la creación de juego, el incremento positivo indica que todos los jugadores de la muestra de ejemplo tomaron la decisión óptima al realizar el pase, maximizando las posibilidades existentes.
+
+--- Incremento en Pases (primeras 5 filas) ---
+       player_name_pass  formula_base  prob_opcion_pase_tiro  incremento
+0           Timo Werner      0.079359                    0.0    0.079359
+1            David Raum      0.289966                    0.0    0.289966
+2  Victor Okoh Boniface      0.278733                    0.0    0.278733
+3         Jonas Hofmann      0.022764                    0.0    0.022764
+4         Jonas Hofmann      0.257728                    0.0    0.257728
+
+Al generar el ránking de jugadores cruzando el ratio de efectividad (goles/tiro) con el incremento, los resultados muestran que la mayoría de los mejores tiradores presentan un valor negativo en su toma de decisiones. Esto indica que, a excepción de casos como el de Chris Führich, los goleadores más efectivos de la muestra tienen un margen de mejora en cuanto a la selección de sus disparos.
+
+--- TOP JUGADORES: GOLES POR TIRO E INCREMENTO ---
+                           total_tiros  total_goles  goles_por_tiro  incremento_medio
+player_name                                                                          
+Chris Führich                        5            2        0.400000          0.011270
+Josip Stanišić                       9            3        0.333333         -0.081499
+Ikoma Loïs Openda                    6            2        0.333333         -0.102674
+Nathan Tella                        20            5        0.250000         -0.053152
+Robert Andrich                      21            4        0.190476         -0.025963
+Maximilian Beier                     6            1        0.166667         -0.030078
+Amine Adli                          25            4        0.160000         -0.009432
+Patrik Schick                       39            6        0.153846         -0.044019
+Alejandro Grimaldo García           52            8        0.153846         -0.076015
+Florian Wirtz                       67           10        0.149254         -0.046767
+
+Con un comportamiento opuesto, observamos que los asistentes más destacados sí logran, por norma general, mejorar las probabilidades predichas por el modelo mediante sus decisiones.
+
+--- TOP JUGADORES: ASISTENCIAS POR PASE E INCREMENTO ---
+                             total_pases  total_asistencias  asistencias_por_pase  incremento_medio
+player_name_pass                                                                                   
+Victor Okoh Boniface                  21                  8              0.380952          0.135094
+Alejandro Grimaldo García             62                 10              0.161290          0.193084
+Florian Wirtz                         59                  9              0.152542          0.076578
+Exequiel Alejandro Palacios           22                  3              0.136364          0.072421
+Jeremie Frimpong                      35                  4              0.114286          0.154515
+Jonas Hofmann                         66                  5              0.075758          0.124051
+Granit Xhaka                          38                  0              0.000000          0.031494
+
+Al ampliar el análisis y realizar un recuento absoluto de todos los participantes (no solo de los líderes del ránking), se consolida esta divergencia. Observamos que la gran mayoría de los pasadores (87.5%) toma la mejor opción disponible en ese momento. Por el contrario, más de la mitad de los tiradores (54.5%) arriesgan más y asumen opciones subóptimas, dando como resultado un incremento negativo.
+
+--- RECUENTO TOTAL: TIROS ---
+Total de jugadores que han tirado: 176
+Suman (Positivo): 80 jugadores (45.5%)
+Restan (Negativo): 96 jugadores (54.5%)
+
+--- RECUENTO TOTAL: PASES ---
+Total de jugadores que han pasado: 144
+Suman (Positivo): 126 jugadores (87.5%)
+Restan (Negativo): 18 jugadores (12.5%)
+
+Este comportamiento puede deberse a la mayor presión espaciotemporal que sufren los delanteros en el último tercio del campo, así como a la urgencia y el sesgo cognitivo que genera la proximidad a la portería rival.
+
+**Incluir los gráficos**
+
+Las gráficas de dispersión permiten corroborar estos resultados de un vistazo. En el gráfico de tiros, se observa cómo la tendencia general de los finalizadores es prácticamente plana o ligeramente descendente. Esto sugiere que, debido a la calidad individual de los jugadores, estos pueden tener éxito (marcar gol) a pesar de no tomar la mejor decisión matemática posible.
+
+Mirando con más detalle, los "jugadores ideales" se situarían en el cuadrante superior derecho de la gráfica; aquellos que no solo tienen éxito, sino que además maximizan las opciones de la jugada. En contraposición, los futbolistas ubicados en la zona inferior derecha son aquellos que mantienen una alta efectividad goleadora (posiblemente debido a un talento técnico diferencial) pero asumen riesgos excesivos en sus decisiones.
+
+En el gráfico de los pases, el comportamiento es radicalmente distinto. La clara tendencia ascendente indica que existe una fuerte correlación: cuanto mejor es la decisión de pase, mayor es la probabilidad de que termine en asistencia. De igual forma, el cuadrante superior derecho agrupa a los creadores de juego que dominan tanto la visión táctica (decisión) como la ejecución técnica (éxito).
+
+Una vez identificados los perfiles según la acción (tiro o pase), la comparación inter-posición revela que el éxito en la creación de juego (pases) depende en mucha mayor medida de tomar buenas decisiones que en el caso de la finalización (tiros). Para los delanteros, aunque el escenario ideal siga siendo maximizar las opciones teóricas, la consecución del gol recae más en la pericia técnica que en la selección analítica de la jugada.
+
+Estos patrones podrían ser de utilidad para el análisis del rendimiento y el entrenamiento táctico, invitando a los cuerpos técnicos a poner el foco en entrenar la toma de decisiones óptima incluso en los momentos de mayor agitación e inmediatez del juego, justo antes del disparo a puerta, sin por ello sacrificar la calidad en la ejecución.
